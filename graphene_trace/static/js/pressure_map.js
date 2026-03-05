@@ -47,3 +47,14 @@
     setInterval(tick, 2000);
   });
 })();
+// inside updateHeatmap(data) / render(data)
+var sug = document.getElementById("reposition-suggestion");
+if (sug) {
+  if (data.reposition && data.reposition.reason) {
+    sug.style.display = "block";
+    sug.textContent = data.reposition.reason;
+  } else {
+    sug.style.display = "none";
+    sug.textContent = "";
+  }
+}
