@@ -36,8 +36,11 @@ __pycache__/
 *.log
 *.pot
 *.sqlite3
+<<<<<<< HEAD
 >>>>>>> 1d0327f (Add .gitignore and remove tracked __pycache__/db.sqlite3 files from version control)
 db.sqlite3
+=======
+>>>>>>> 05c541b (Remove duplicate db.sqlite3 entry from .gitignore (already covered by *.sqlite3))
 media/
 staticfiles/
 
