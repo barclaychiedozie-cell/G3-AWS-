@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -23,10 +24,24 @@ env.bak/
 # Django stuff:
 *.log
 local_settings.py
+=======
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Django
+*.log
+*.pot
+*.sqlite3
+>>>>>>> 1d0327f (Add .gitignore and remove tracked __pycache__/db.sqlite3 files from version control)
 db.sqlite3
 media/
 staticfiles/
 
+<<<<<<< HEAD
 # If using node for frontend assets
 node_modules/
 
@@ -59,3 +74,20 @@ desktop.ini
 *.egg
 
 # End of .gitignore
+=======
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+>>>>>>> 1d0327f (Add .gitignore and remove tracked __pycache__/db.sqlite3 files from version control)
