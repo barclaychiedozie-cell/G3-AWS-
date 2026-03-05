@@ -1,10 +1,13 @@
 import re
-from django.http import JsonResponse
-from django.shortcuts import render
-from django.contrib.auth.decorators import login_required
+from datetime import timedelta
 
-from .models import PressureData, Comment
+from django.contrib.auth.decorators import login_required
+from django.http import JsonResponse
+from django.shortcuts import redirect, render
+from django.utils import timezone
+
 from .forms import CommentForm
+from .models import Comment, Notification, PressureData
 
 
 @login_required
@@ -12,11 +15,27 @@ def dashboard(request):
     if request.user.role != "patient":
         return render(request, "403.html")
 
-    return render(request, "patients/dashboard.html")
+    # Latest notifications on the dashboard (most recent first)
+    notifications = (
+        Notification.objects.filter(patient=request.user)
+        .order_by("-timestamp")[:10]
+    )
+
+    return render(
+        request,
+        "patients/dashboard.html",
+        {"notifications": notifications},
+    )
 
 
 @login_required
 def live_grid_json(request):
+    """
+    Returns latest heatmap grid snapshot:
+      { cells: [{r,c,value}, ...], timestamp: <iso> }
+
+    Assumes PressureData.sensor_location like: r3_c7
+    """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
@@ -36,12 +55,63 @@ def live_grid_json(request):
         m = re.match(r"r(\d+)_c(\d+)", (row.sensor_location or "").strip())
         if not m:
             continue
-        r = int(m.group(1))
-        c = int(m.group(2))
-        cells.append({"r": r, "c": c, "value": row.pressure_value})
+        cells.append(
+            {
+                "r": int(m.group(1)),
+                "c": int(m.group(2)),
+                "value": float(row.pressure_value or 0),
+            }
+        )
 
     return JsonResponse({"cells": cells, "timestamp": latest_ts.isoformat()})
-# ADD this function into the same patients/views.py
+
+
+@login_required
+def live_heatmap_chart_json(request):
+    """
+    Real-time chart data derived from recent grid snapshots.
+    Returns max & avg per timestamp within last 15 minutes:
+      { data: [{timestamp, max, avg}, ...] }
+    """
+    if request.user.role != "patient":
+        return JsonResponse({"error": "forbidden"}, status=403)
+
+    since = timezone.now() - timedelta(minutes=15)
+
+    qs = (
+        PressureData.objects.filter(patient=request.user, timestamp__gte=since)
+        .values("timestamp", "pressure_value")
+        .order_by("timestamp")
+    )
+
+    buckets = {}  # ts_iso -> {"timestamp":..., "sum":..., "count":..., "max":...}
+    for row in qs:
+        ts = row["timestamp"]
+        ts_key = ts.isoformat()
+        val = float(row["pressure_value"] or 0)
+
+        b = buckets.get(ts_key)
+        if not b:
+            b = {"timestamp": ts_key, "sum": 0.0, "count": 0, "max": val}
+            buckets[ts_key] = b
+
+        b["sum"] += val
+        b["count"] += 1
+        if val > b["max"]:
+            b["max"] = val
+
+    data = sorted(buckets.values(), key=lambda x: x["timestamp"])
+    out = [
+        {
+            "timestamp": d["timestamp"],
+            "max": d["max"],
+            "avg": (d["sum"] / d["count"]) if d["count"] else 0,
+        }
+        for d in data
+    ]
+
+    return JsonResponse({"data": out})
+
 
 @login_required
 def comments(request):

@@ -14,6 +14,7 @@
 
 *{ box-sizing:border-box; }
 html,body{ height:100%; }
+
 body{
   margin:0;
   font-family:var(--font);
@@ -29,21 +30,24 @@ a{ color:#93c5fd; text-decoration:none; }
 a:hover{ text-decoration:underline; }
 
 .container{
-  max-width: 920px;
+  max-width: 1100px;
   margin: 0 auto;
   padding: 32px 18px 48px;
 }
 
+/* --- Nav --- */
 .nav{
   display:flex;
   align-items:center;
   justify-content:space-between;
+  gap:12px;
   padding:16px 18px;
   border-bottom:1px solid rgba(148,163,184,.16);
   background: rgba(15,23,42,.55);
   backdrop-filter: blur(10px);
   position: sticky;
   top:0;
+  z-index: 10;
 }
 
 .brand{
@@ -52,6 +56,7 @@ a:hover{ text-decoration:underline; }
   color: var(--text);
 }
 
+/* --- Cards + typography --- */
 .card{
   background: rgba(15,23,42,.86);
   border: 1px solid rgba(148,163,184,.16);
@@ -64,8 +69,20 @@ a:hover{ text-decoration:underline; }
 .h2{ font-size: 20px; margin:0 0 12px; }
 .p{ margin:0 0 12px; color: var(--muted); line-height:1.5; }
 
+.small{
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* --- Forms --- */
 .form-row{ margin: 12px 0; }
-label{ display:block; font-size: 13px; color: var(--muted); margin-bottom:6px; }
+
+label{
+  display:block;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom:6px;
+}
 
 input[type="text"],
 input[type="password"],
@@ -86,6 +103,23 @@ input:focus, select:focus, textarea:focus{
   box-shadow: 0 0 0 4px rgba(59,130,246,.15);
 }
 
+.helptext{
+  display:block;
+  font-size: 12px;
+  color: rgba(148,163,184,.85);
+  margin-top: 6px;
+}
+
+.errorlist{
+  margin: 10px 0;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: rgba(239,68,68,.12);
+  border: 1px solid rgba(239,68,68,.22);
+  color: #fecaca;
+}
+
+/* --- Buttons --- */
 .btn{
   display:inline-flex;
   align-items:center;
@@ -98,6 +132,7 @@ input:focus, select:focus, textarea:focus{
   color: var(--text);
   cursor:pointer;
   font-weight:600;
+  text-decoration:none;
 }
 
 .btn-primary{
@@ -108,27 +143,7 @@ input:focus, select:focus, textarea:focus{
 .btn-primary:hover{ filter: brightness(1.05); }
 .btn:active{ transform: translateY(1px); }
 
-.small{
-  font-size: 13px;
-  color: var(--muted);
-}
-
-.errorlist{
-  margin: 10px 0;
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(239,68,68,.12);
-  border: 1px solid rgba(239,68,68,.22);
-  color: #fecaca;
-}
-
-.helptext{
-  display:block;
-  font-size: 12px;
-  color: rgba(148,163,184,.85);
-  margin-top: 6px;
-}
-/* --- Dashboard layout helpers --- */
+/* -------------------- Dashboard layout -------------------- */
 .dash-header{
   display:flex;
   align-items:flex-start;
@@ -180,6 +195,7 @@ input:focus, select:focus, textarea:focus{
   border: 1px solid rgba(148,163,184,.22);
 }
 
+/* Heatmap container */
 .heatmap-wrap{
   border-radius: 14px;
   border: 1px solid rgba(148,163,184,.16);
@@ -194,6 +210,23 @@ input:focus, select:focus, textarea:focus{
   position:relative;
 }
 
+/* Trend chart container (this is what makes the chart visible) */
+.chart-wrap{
+  height: 260px;
+  border-radius: 14px;
+  border: 1px solid rgba(148,163,184,.16);
+  background: rgba(2,6,23,.22);
+  padding: 10px;
+  overflow: hidden;
+}
+
+.chart-wrap canvas{
+  width: 100% !important;
+  height: 100% !important;
+  display:block;
+}
+
+/* Right column stack */
 .stack{
   display:flex;
   flex-direction:column;
@@ -221,4 +254,50 @@ input:focus, select:focus, textarea:focus{
   border: 1px solid rgba(59,130,246,.25);
   background: rgba(59,130,246,.10);
   color: var(--text);
+}
+
+/* Notifications */
+.notif-list{
+  display:flex;
+  flex-direction:column;
+  gap:10px;
+  margin-top:8px;
+}
+
+.notif{
+  border: 1px solid rgba(148,163,184,.14);
+  background: rgba(2,6,23,.22);
+  border-radius: 12px;
+  padding: 10px 10px;
+}
+
+.notif-msg{
+  color: var(--text);
+  margin-bottom:6px;
+}
+
+/* Comments (optional styling if you use the comments pages) */
+.comment{
+  border: 1px solid rgba(148,163,184,.14);
+  background: rgba(2,6,23,.22);
+  border-radius: 12px;
+  padding: 12px;
+  margin-top: 10px;
+}
+
+.comment-head{
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:10px;
+  margin-bottom:8px;
+}
+
+.comment-text{
+  color: var(--text);
+  line-height:1.5;
+}
+
+.comment-meta{
+  margin-top:8px;
 }
