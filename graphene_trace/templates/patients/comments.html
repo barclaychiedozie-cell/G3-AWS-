@@ -1,0 +1,27 @@
+{% extends 'base.html' %}
+{% block content %}
+  <h2>Your Comments</h2>
+
+  <h3>Add a Comment</h3>
+  <form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Add Comment</button>
+  </form>
+
+  <hr>
+
+  {% for comment in comments %}
+    <div style="border:1px solid #eee;padding:10px;margin:10px 0">
+      <div><strong>You</strong> — {{ comment.timestamp }}</div>
+      <div>{{ comment.text }}</div>
+      {% if comment.pressure_data %}
+        <div style="color:#666">
+          Related to: {{ comment.pressure_data.sensor_location }} at {{ comment.pressure_data.timestamp }}
+        </div>
+      {% endif %}
+    </div>
+  {% empty %}
+    <p>No comments yet.</p>
+  {% endfor %}
+{% endblock %}
