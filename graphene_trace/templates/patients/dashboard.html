@@ -1,17 +1,113 @@
-{% extends 'base.html' %}
+{% extends "base.html" %}
 {% load static %}
-{% block content %}
-  <h2>Patient Dashboard</h2>
 
-  <div style="width:800px;max-width:100%;height:420px;border:1px solid #ddd">
-    <div id="heatmapContainer" style="width:100%;height:100%;position:relative"></div>
+{% block content %}
+  <div class="dash-header">
+    <div>
+      <div class="small">Patient Dashboard</div>
+      <h1 class="h1" style="margin-top:6px;">
+        Welcome, {{ user.first_name|default:user.username }}
+      </h1>
+
+      {% if user.id_number %}
+        <div class="small" style="margin-top:6px;">ID: <strong>{{ user.id_number }}</strong></div>
+      {% endif %}
+
+      <div class="small" style="margin-top:6px;">
+        Last update: <span id="last-update">—</span>
+      </div>
+    </div>
+
+    <div class="dash-actions">
+      <a class="btn" href="{% url 'comments' %}">Comments</a>
+    </div>
   </div>
 
-  <p>Last update: <span id="last-update">—</span></p>
+  <div class="dash-grid">
+    <!-- LEFT: Heatmap + Trend Chart -->
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="h2">Live Pressure Heatmap</h2>
+          <p class="p" style="margin-bottom:0;">
+            Red = higher pressure. Updates automatically.
+          </p>
+        </div>
 
+        <div class="legend">
+          <span class="small">Low</span>
+          <span class="legend-bar" aria-hidden="true"></span>
+          <span class="small">High</span>
+        </div>
+      </div>
+
+      <div class="heatmap-wrap">
+        <div id="heatmapContainer" class="heatmap"></div>
+      </div>
+
+      <div id="reposition-suggestion" class="notice" style="display:none;"></div>
+
+      <!-- Trend chart (Max + Avg) -->
+      <div style="margin-top:14px;">
+        <h2 class="h2" style="margin-bottom:8px;">Heatmap Trend (Real Time)</h2>
+        <p class="p" style="margin-top:-6px;">
+          Max and average pressure derived from the heatmap grid.
+        </p>
+
+        <div class="chart-wrap">
+          <canvas id="heatmapTrendChart"></canvas>
+        </div>
+      </div>
+    </section>
+
+    <!-- RIGHT: Notifications + Tips -->
+    <aside class="stack">
+      <section class="card">
+        <div class="card-head" style="margin-bottom:6px;">
+          <h2 class="h2" style="margin:0;">Notifications</h2>
+        </div>
+
+        {% if notifications %}
+          <div class="notif-list">
+            {% for n in notifications %}
+              <div class="notif">
+                <div class="notif-msg">{{ n.message }}</div>
+                <div class="small">{{ n.timestamp }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="p" style="margin:0;">No notifications right now.</p>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <h2 class="h2">Quick Tips</h2>
+        <ul class="list">
+          <li>Shift weight every few minutes.</li>
+          <li>If pressure is high, try a small posture change.</li>
+          <li>Leave a comment tied to a data point if you feel discomfort.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="h2">Shortcuts</h2>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="{% url 'comments' %}">Add a comment</a>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <!-- Scripts -->
   <script src="https://cdn.jsdelivr.net/npm/heatmapjs@2.0.5/build/heatmap.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+
   <script>
     window.LIVE_GRID_URL = "{% url 'live_grid_json' %}";
+    window.LIVE_HEATMAP_CHART_URL = "{% url 'live_heatmap_chart_json' %}";
   </script>
+
   <script src="{% static 'js/pressure_map.js' %}"></script>
+  <script src="{% static 'js/heatmap_trend_chart.js' %}"></script>
 {% endblock %}

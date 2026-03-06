@@ -1,19 +1,29 @@
+{% load static %}
 <!doctype html>
 <html>
   <head>
     <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Graphene Trace</title>
+    <link rel="stylesheet" href="{% static 'css/app.css' %}">
   </head>
   <body>
-    {% if user.is_authenticated %}
-      <p>
-        Logged in as {{ user.username }} |
-        <form method="post" action="{% url 'logout' %}" style="display:inline">
-          {% csrf_token %}<button type="submit">Logout</button>
-        </form>
-      </p>
-    {% endif %}
+    <header class="nav">
+      <div class="brand">Graphene Trace</div>
 
-    {% block content %}{% endblock %}
+      {% if user.is_authenticated %}
+        <div class="small">
+          {{ user.username }}
+          <form method="post" action="{% url 'logout' %}" style="display:inline">
+            {% csrf_token %}
+            <button class="btn" type="submit">Logout</button>
+          </form>
+        </div>
+      {% endif %}
+    </header>
+
+    <main class="container">
+      {% block content %}{% endblock %}
+    </main>
   </body>
 </html>
