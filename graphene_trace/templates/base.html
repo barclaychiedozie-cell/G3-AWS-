@@ -11,15 +11,22 @@
     <header class="nav">
       <div class="brand">Graphene Trace</div>
 
-      {% if user.is_authenticated %}
-        <div class="small">
-          {{ user.username }}
-          <form method="post" action="{% url 'logout' %}" style="display:inline">
-            {% csrf_token %}
-            <button class="btn" type="submit">Logout</button>
-          </form>
+      {% block nav_right %}
+        <div style="display:flex;align-items:center;gap:12px;">
+          {% if user.is_authenticated %}
+            <div class="small" style="display:flex;align-items:center;gap:10px;">
+              <span>{{ user.username }}</span>
+
+              <form method="post" action="{% url 'logout' %}" style="display:inline;margin:0;">
+                {% csrf_token %}
+                <button class="btn" type="submit">Logout</button>
+              </form>
+            </div>
+          {% else %}
+            <a class="btn" href="{% url 'login' %}">Login</a>
+          {% endif %}
         </div>
-      {% endif %}
+      {% endblock %}
     </header>
 
     <main class="container">
