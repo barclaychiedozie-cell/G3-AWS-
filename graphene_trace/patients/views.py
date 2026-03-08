@@ -130,3 +130,40 @@ def comments(request):
 
     comments_qs = Comment.objects.filter(patient=request.user).order_by("-timestamp")
     return render(request, "patients/comments.html", {"form": form, "comments": comments_qs})
+
+@login_required
+def pressure_history_json(request):
+    """
+    Historical pressure readings for the logged-in patient (CSV-uploaded or live).
+
+    Optional query params:
+      - since_minutes=1440 (default 1440 = last 24h)
+      - limit=20000
+    """
+    if request.user.role != "patient":
+        return JsonResponse({"error": "forbidden"}, status=403)
+
+    since_minutes = int(request.GET.get("since_minutes", "1440"))
+    since_minutes = max(1, min(since_minutes, 60 * 24 * 365))
+
+    limit = int(request.GET.get("limit", "20000"))
+    limit = max(1, min(limit, 50000))
+
+    since = timezone.now() - timedelta(minutes=since_minutes)
+
+    qs = (
+        PressureData.objects.filter(patient=request.user, timestamp__gte=since)
+        .values("timestamp", "sensor_location", "pressure_value")
+        .order_by("-timestamp")[:limit]
+    )
+
+    data = [
+        {
+            "timestamp": row["timestamp"].isoformat(),
+            "sensor_location": row["sensor_location"],
+            "pressure_value": float(row["pressure_value"] or 0),
+        }
+        for row in reversed(list(qs))
+    ]
+
+    return JsonResponse({"data": data})

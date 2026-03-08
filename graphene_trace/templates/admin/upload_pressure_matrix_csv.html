@@ -1,0 +1,22 @@
+{% extends "admin/base_site.html" %}
+
+{% block content %}
+  <h1>Upload Patient Pressure Matrix (CSV)</h1>
+
+  <p>
+    This uploader expects a <strong>matrix CSV</strong> like your screenshot:
+    no headers, just rows/columns of numbers.
+  </p>
+
+  <p>
+    It will store each cell as a <code>PressureData</code> row with
+    <code>sensor_location</code> like <code>r1_c1</code>, <code>r1_c2</code>, etc,
+    all using the same timestamp.
+  </p>
+
+  <form method="post" enctype="multipart/form-data">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <input type="submit" value="Upload" class="default">
+  </form>
+{% endblock %}
