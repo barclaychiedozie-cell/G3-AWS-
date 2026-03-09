@@ -1,61 +1,29 @@
-# Byte-compiled / optimized / DLL files
+# Python
 __pycache__/
+*.pyc
+*.pyo
+*.pyd
 *.py[cod]
-*$py.class
 
-# C extensions
-*.so
-
-# Distribution / packaging
-build/
-dist/
-*.egg-info/
-pip-wheel-metadata/
-
-# Virtual environments
-.env
-.venv/
-venv/
-ENV/
-env/
-env.bak/
-
-# Django stuff:
+# Django
 *.log
-local_settings.py
-db.sqlite3
+*.pot
+*.sqlite3
 media/
 staticfiles/
 
-# If using node for frontend assets
-node_modules/
+# Virtual environments
+.env
+.venv
+env/
+venv/
 
-# VS Code
+# IDE
 .vscode/
-
-# JetBrains IDEs
 .idea/
+*.swp
+*.swo
 
-# Pytest
-.pytest_cache/
-
-# Coverage
-.coverage
-htmlcov/
-
-# macOS / Windows
+# OS
 .DS_Store
 Thumbs.db
-desktop.ini
-
-# Editor temporary files
-*~
-*.swp
-
-# Logs
-*.log
-
-# Ignore compiled C extensions
-*.egg
-
-# End of .gitignore
