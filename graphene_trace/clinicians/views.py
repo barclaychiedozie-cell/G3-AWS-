@@ -18,7 +18,53 @@ def dashboard(request):
         return render(request, "403.html")
 
     patients = User.objects.filter(role="patient").order_by("username")
-    return render(request, "clinician/dashboard.html", {"patients": patients})
+
+    if request.method == "POST":
+        text = (request.POST.get("message_text") or "").strip()
+        patient_id_raw = request.POST.get("message_patient_id")
+
+        target_patient = None
+        try:
+            target_patient = patients.get(id=int(patient_id_raw))
+        except (TypeError, ValueError, User.DoesNotExist):
+            target_patient = None
+
+        if target_patient and text:
+            Comment.objects.create(
+                patient=target_patient,
+                clinician=request.user,
+                text=text,
+                is_reply=True,
+            )
+            return redirect(f"/clinician/dashboard/?thread_patient_id={target_patient.id}")
+
+    selected_patient_id = request.GET.get("thread_patient_id")
+    selected_patient = None
+    if selected_patient_id:
+        try:
+            selected_patient = patients.get(id=int(selected_patient_id))
+        except (TypeError, ValueError, User.DoesNotExist):
+            selected_patient = None
+    if not selected_patient:
+        selected_patient = patients.first()
+
+    thread_messages = Comment.objects.none()
+    if selected_patient:
+        thread_messages = (
+            Comment.objects.filter(patient=selected_patient)
+            .select_related("patient", "clinician")
+            .order_by("-timestamp")[:12]
+        )
+
+    return render(
+        request,
+        "clinician/dashboard.html",
+        {
+            "patients": patients,
+            "selected_patient": selected_patient,
+            "thread_messages": thread_messages,
+        },
+    )
 
 
 @login_required

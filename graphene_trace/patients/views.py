@@ -2,6 +2,7 @@ import re
 from datetime import timedelta
 
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth import get_user_model
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
@@ -9,11 +10,32 @@ from django.utils import timezone
 from .forms import CommentForm
 from .models import Comment, Notification, PressureData
 
+User = get_user_model()
+
 
 @login_required
 def dashboard(request):
     if request.user.role != "patient":
         return render(request, "403.html")
+
+    if request.method == "POST":
+        feedback_text = (request.POST.get("feedback_text") or "").strip()
+        clinician_id_raw = request.POST.get("clinician_id")
+
+        target_clinician = None
+        try:
+            target_clinician = User.objects.get(id=int(clinician_id_raw), role="clinician")
+        except (TypeError, ValueError, User.DoesNotExist):
+            target_clinician = None
+
+        if feedback_text:
+            Comment.objects.create(
+                patient=request.user,
+                clinician=target_clinician,
+                text=feedback_text,
+                is_reply=True,
+            )
+            return redirect("dashboard")
 
     # Latest notifications on the dashboard (most recent first)
     notifications = (
@@ -21,10 +43,31 @@ def dashboard(request):
         .order_by("-timestamp")[:10]
     )
 
+    feedback_messages = list(
+        Comment.objects.filter(patient=request.user)
+        .select_related("patient", "clinician")
+        .order_by("-timestamp")[:8]
+    )
+
+    clinicians = User.objects.filter(role="clinician").order_by("username")
+    if any(msg.clinician_id for msg in feedback_messages):
+        clinicians = (
+            User.objects.filter(
+                role="clinician",
+                clinician_comments__patient=request.user,
+            )
+            .distinct()
+            .order_by("username")
+        )
+
     return render(
         request,
         "patients/dashboard.html",
-        {"notifications": notifications},
+        {
+            "notifications": notifications,
+            "feedback_messages": feedback_messages,
+            "clinicians": clinicians,
+        },
     )
 
 

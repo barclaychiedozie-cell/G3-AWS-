@@ -36,35 +36,60 @@
 
     <aside class="stack">
       <section class="card">
-        <h2 class="h2">Select Patients</h2>
+        <h2 class="h2">Send Feedback</h2>
         {% if patients %}
-          <div id="patientSelector" class="notif-list">
-            {% for p in patients %}
-              <label class="notif" style="display:flex;align-items:center;gap:8px;">
-                <input type="checkbox" class="patient-checkbox" value="{{ p.id }}" {% if forloop.counter <= 3 %}checked{% endif %}>
-                <span>{{ p.get_full_name|default:p.username }}</span>
-              </label>
-            {% endfor %}
-          </div>
+          <form method="post">
+            {% csrf_token %}
+            <div class="form-row">
+              <label for="id_message_patient_id">Patient</label>
+              <select id="id_message_patient_id" name="message_patient_id">
+                {% for p in patients %}
+                  <option value="{{ p.id }}" {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}>
+                    {{ p.get_full_name|default:p.username }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+            <div class="form-row">
+              <label for="id_message_text">Message</label>
+              <textarea id="id_message_text" name="message_text" rows="3" placeholder="Write clinician feedback for this patient..."></textarea>
+            </div>
+            <button class="btn btn-primary" type="submit">Send to patient</button>
+          </form>
         {% else %}
           <p class="p" style="margin:0;">No patients available.</p>
         {% endif %}
       </section>
 
       <section class="card">
-        <h2 class="h2">Patient Feedback Threads</h2>
-        {% if patients %}
-          <div class="notif-list">
-            {% for p in patients %}
-              <a class="btn" href="{% url 'patient_comments' p.id %}">
-                {{ p.get_full_name|default:p.username }} comments
-              </a>
+        <h2 class="h2">Feedback Conversation</h2>
+        {% if selected_patient %}
+          <div class="small" style="margin-bottom:8px;">
+            Showing messages with <strong>{{ selected_patient.get_full_name|default:selected_patient.username }}</strong>
+          </div>
+        {% endif %}
+
+        {% if thread_messages %}
+          <div class="notif-list" style="max-height:280px;overflow:auto;">
+            {% for msg in thread_messages %}
+              <div class="notif">
+                <div class="notif-msg">
+                  {% if msg.clinician %}
+                    <strong>{{ msg.clinician.get_full_name|default:msg.clinician.username }}</strong>
+                  {% else %}
+                    <strong>{{ msg.patient.get_full_name|default:msg.patient.username }}</strong>
+                  {% endif %}
+                  : {{ msg.text }}
+                </div>
+                <div class="small">{{ msg.timestamp }}</div>
+              </div>
             {% endfor %}
           </div>
         {% else %}
-          <p class="p" style="margin:0;">No feedback threads yet.</p>
+          <p class="p" style="margin:0;">No messages in this thread yet.</p>
         {% endif %}
       </section>
+
     </aside>
   </div>
 

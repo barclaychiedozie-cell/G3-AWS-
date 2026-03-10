@@ -91,6 +91,47 @@
       </section>
 
       <section class="card">
+        <h2 class="h2">Clinician Feedback</h2>
+
+        {% if feedback_messages %}
+          <div class="notif-list" style="max-height:260px;overflow:auto;">
+            {% for msg in feedback_messages %}
+              <div class="notif">
+                <div class="notif-msg">
+                  {% if msg.clinician %}
+                    <strong>{{ msg.clinician.get_full_name|default:msg.clinician.username }}</strong>
+                  {% else %}
+                    <strong>You</strong>
+                  {% endif %}
+                  : {{ msg.text }}
+                </div>
+                <div class="small">{{ msg.timestamp }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="p" style="margin:0;">No feedback messages yet.</p>
+        {% endif %}
+
+        <form method="post" style="margin-top:12px;">
+          {% csrf_token %}
+          <div class="form-row">
+            <label for="id_clinician_id">Reply to clinician</label>
+            <select id="id_clinician_id" name="clinician_id">
+              {% for c in clinicians %}
+                <option value="{{ c.id }}">{{ c.get_full_name|default:c.username }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-row">
+            <label for="id_feedback_text">Your message</label>
+            <textarea id="id_feedback_text" name="feedback_text" rows="3" placeholder="Write a response to your clinician..."></textarea>
+          </div>
+          <button class="btn btn-primary" type="submit">Send reply</button>
+        </form>
+      </section>
+
+      <section class="card">
         <h2 class="h2">Shortcuts</h2>
         <div class="btn-row">
           <a class="btn btn-primary" href="{% url 'comments' %}">Add a comment</a>
