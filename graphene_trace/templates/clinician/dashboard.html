@@ -1,0 +1,76 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+  <div class="dash-header">
+    <div>
+      <div class="small">Clinician Dashboard</div>
+      <h1 class="h1" style="margin-top:6px;">
+        Welcome, {{ user.first_name|default:user.username }}
+      </h1>
+      <div class="small" style="margin-top:6px;">
+        Compare patient pressure trends over time.
+      </div>
+    </div>
+
+    <div class="dash-actions">
+      <button id="refreshComparison" class="btn btn-primary" type="button">Refresh report</button>
+    </div>
+  </div>
+
+  <div class="dash-grid">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="h2">Comparison Report (Average Pressure)</h2>
+          <p class="p" style="margin-bottom:0;">
+            Hourly averages for selected patients.
+          </p>
+        </div>
+      </div>
+
+      <div class="chart-wrap">
+        <canvas id="clinicianComparisonChart"></canvas>
+      </div>
+    </section>
+
+    <aside class="stack">
+      <section class="card">
+        <h2 class="h2">Select Patients</h2>
+        {% if patients %}
+          <div id="patientSelector" class="notif-list">
+            {% for p in patients %}
+              <label class="notif" style="display:flex;align-items:center;gap:8px;">
+                <input type="checkbox" class="patient-checkbox" value="{{ p.id }}" {% if forloop.counter <= 3 %}checked{% endif %}>
+                <span>{{ p.get_full_name|default:p.username }}</span>
+              </label>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="p" style="margin:0;">No patients available.</p>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <h2 class="h2">Patient Feedback Threads</h2>
+        {% if patients %}
+          <div class="notif-list">
+            {% for p in patients %}
+              <a class="btn" href="{% url 'patient_comments' p.id %}">
+                {{ p.get_full_name|default:p.username }} comments
+              </a>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="p" style="margin:0;">No feedback threads yet.</p>
+        {% endif %}
+      </section>
+    </aside>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <script>
+    window.CLINICIAN_COMPARISON_REPORT_URL = "{% url 'clinician_comparison_report_json' %}";
+  </script>
+  <script src="{% static 'js/clinician_comparison_chart.js' %}"></script>
+{% endblock %}
