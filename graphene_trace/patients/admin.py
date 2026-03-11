@@ -1,5 +1,4 @@
 import csv
-from io import TextIOWrapper
 
 from django import forms
 from django.contrib import admin, messages
@@ -9,11 +8,13 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from users.models import User
-from .models import Comment, Notification, PressureData
+from .models import Comment, Notification, PressureData, PressureUpload
 
 
 class UploadPressureMatrixCSVForm(forms.Form):
-    patient_username = forms.CharField(help_text="Existing patient username (role must be patient).")
+    patient_username = forms.CharField(
+        help_text="Existing patient username (role must be patient)."
+    )
     timestamp = forms.CharField(
         required=False,
         help_text="Optional. ISO format like 2026-03-01T14:00:00Z. Leave blank to use now().",
@@ -23,14 +24,17 @@ class UploadPressureMatrixCSVForm(forms.Form):
     )
 
 
-@admin.register(PressureData)
-class PressureDataAdmin(admin.ModelAdmin):
-    list_display = ("patient", "timestamp", "sensor_location", "pressure_value")
-    list_filter = ("sensor_location", "patient")
+@admin.register(PressureUpload)
+class PressureUploadAdmin(admin.ModelAdmin):
+    list_display = ("patient", "timestamp", "uploaded_at", "rows", "cols", "csv_file")
+    list_filter = ("patient",)
     search_fields = ("patient__username", "patient__email")
     ordering = ("-timestamp",)
 
-    change_list_template = "admin/pressuredata_changelist.html"
+    change_list_template = "admin/pressureupload_changelist.html"
+
+    def has_add_permission(self, request):
+        return False
 
     def get_urls(self):
         urls = super().get_urls()
@@ -38,7 +42,7 @@ class PressureDataAdmin(admin.ModelAdmin):
             path(
                 "upload-matrix-csv/",
                 self.admin_site.admin_view(self.upload_matrix_csv),
-                name="pressuredata_upload_matrix_csv",
+                name="pressureupload_upload_matrix_csv",
             ),
         ]
         return custom + urls
@@ -67,26 +71,37 @@ class PressureDataAdmin(admin.ModelAdmin):
 
                 # timestamp
                 if ts_raw:
-                    ts = parse_datetime(ts_raw)
-                    if ts is None:
-                        ts = parse_datetime(ts_raw.replace(" ", "T"))
+                    ts = parse_datetime(ts_raw) or parse_datetime(ts_raw.replace(" ", "T"))
                     if ts is None:
                         messages.error(request, f"Timestamp not parseable: {ts_raw}")
                         return redirect("..")
+                    if timezone.is_naive(ts):
+                        ts = timezone.make_aware(ts, timezone.get_current_timezone())
                 else:
                     ts = timezone.now()
 
-                created, errors = self._import_matrix_csv(patient=patient, timestamp=ts, uploaded_file=f)
+                # IMPORTANT: compute dims without wrapping/closing f.file (fixes Windows temp-file FileNotFoundError)
+                rows, cols, encoding = self._count_matrix_dims_safe(f)
 
-                for e in errors[:30]:
-                    messages.error(request, e)
-                if len(errors) > 30:
-                    messages.error(request, f"... plus {len(errors) - 30} more errors")
+                # Rewind so FileField can save correctly
+                try:
+                    f.seek(0)
+                except Exception:
+                    pass
+
+                upload = PressureUpload(
+                    patient=patient,
+                    timestamp=ts,
+                    csv_file=f,
+                    rows=rows,
+                    cols=cols,
+                )
+                upload.save()
 
                 messages.success(
                     request,
-                    f"Matrix import complete for {patient.username} @ {ts.isoformat()}: "
-                    f"created={created}, errors={len(errors)}",
+                    f"CSV stored for {patient.username} @ {ts.isoformat()} "
+                    f"(rows={rows}, cols={cols}, encoding={encoding}).",
                 )
                 return redirect("..")
         else:
@@ -94,47 +109,45 @@ class PressureDataAdmin(admin.ModelAdmin):
 
         return render(request, "admin/upload_pressure_matrix_csv.html", {"form": form})
 
-    def _import_matrix_csv(self, patient, timestamp, uploaded_file):
-        created = 0
-        errors = []
+    def _count_matrix_dims_safe(self, uploaded_file):
+        """
+        Safely compute rows/cols without touching uploaded_file.file / TextIOWrapper,
+        which can close the underlying Windows temp file and break FileField save().
+        """
+        raw = b"".join(uploaded_file.chunks())
 
-        wrapper = TextIOWrapper(uploaded_file.file, encoding="utf-8")
-        reader = csv.reader(wrapper)
+        # Try utf-8-sig first, then fallback to cp1252
+        try:
+            text = raw.decode("utf-8-sig", errors="replace")
+            encoding = "utf-8-sig"
+        except Exception:
+            text = raw.decode("cp1252", errors="replace")
+            encoding = "cp1252"
 
-        rows_to_create = []
-
-        # NOTE: we use 1-based r/c to match your parsing: r(\d+)_c(\d+)
-        for r_index, row in enumerate(reader, start=1):
+        reader = csv.reader(text.splitlines())
+        rows = 0
+        cols = 0
+        for row in reader:
             if not row:
                 continue
+            rows += 1
+            cols = max(cols, len(row))
 
-            for c_index, cell in enumerate(row, start=1):
-                raw = (cell or "").strip()
+        return rows, cols, encoding
 
-                # allow empty cells as 0
-                if raw == "":
-                    val = 0.0
-                else:
-                    try:
-                        val = float(raw)
-                    except ValueError:
-                        errors.append(f"Bad number at r{r_index} c{c_index}: '{raw}'")
-                        continue
 
-                rows_to_create.append(
-                    PressureData(
-                        patient=patient,
-                        timestamp=timestamp,
-                        sensor_location=f"r{r_index}_c{c_index}",
-                        pressure_value=val,
-                    )
-                )
+@admin.register(PressureData)
+class PressureDataAdmin(admin.ModelAdmin):
+    list_display = ("patient", "timestamp", "sensor_location", "pressure_value")
+    list_filter = ("sensor_location", "patient")
+    search_fields = ("patient__username", "patient__email")
+    ordering = ("-timestamp",)
 
-        if rows_to_create:
-            PressureData.objects.bulk_create(rows_to_create, batch_size=5000)
-            created = len(rows_to_create)
+    def has_add_permission(self, request):
+        return False
 
-        return created, errors
+    def has_change_permission(self, request, obj=None):
+        return False
 
 
 @admin.register(Comment)
