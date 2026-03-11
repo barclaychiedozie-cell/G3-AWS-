@@ -1,40 +1,49 @@
+import csv
 import re
-from datetime import timedelta
+from datetime import datetime, timedelta
+from io import TextIOWrapper
 
 from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
+from django.utils.dateparse import parse_date, parse_datetime
 
 from .forms import CommentForm
-from .models import Comment, Notification, PressureData
+from .models import Comment, Notification, PressureData, PressureUpload
+
+
+SENSOR_RE = re.compile(r"r(\d+)_c(\d+)$")
+
+
+def _open_csv_text(fh):
+    """
+    Robust CSV decoding for Excel/Windows exports.
+    """
+    try:
+        return TextIOWrapper(fh, encoding="utf-8-sig", errors="replace", newline="")
+    except Exception:
+        return TextIOWrapper(fh, encoding="cp1252", errors="replace", newline="")
 
 
 @login_required
 def dashboard(request):
     if request.user.role != "patient":
-        return render(request, "403.html")
+        return render(request, "403.html", status=403)
 
-    # Latest notifications on the dashboard (most recent first)
     notifications = (
         Notification.objects.filter(patient=request.user)
         .order_by("-timestamp")[:10]
     )
 
-    return render(
-        request,
-        "patients/dashboard.html",
-        {"notifications": notifications},
-    )
+    return render(request, "patients/dashboard.html", {"notifications": notifications})
 
 
 @login_required
 def live_grid_json(request):
     """
-    Returns latest heatmap grid snapshot:
+    Returns latest heatmap grid snapshot from DB PressureData:
       { cells: [{r,c,value}, ...], timestamp: <iso> }
-
-    Assumes PressureData.sensor_location like: r3_c7
     """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
@@ -52,7 +61,7 @@ def live_grid_json(request):
 
     cells = []
     for row in rows:
-        m = re.match(r"r(\d+)_c(\d+)", (row.sensor_location or "").strip())
+        m = SENSOR_RE.match((row.sensor_location or "").strip())
         if not m:
             continue
         cells.append(
@@ -69,7 +78,7 @@ def live_grid_json(request):
 @login_required
 def live_heatmap_chart_json(request):
     """
-    Real-time chart data derived from recent grid snapshots.
+    Real-time chart data derived from recent DB grid snapshots.
     Returns max & avg per timestamp within last 15 minutes:
       { data: [{timestamp, max, avg}, ...] }
     """
@@ -84,7 +93,7 @@ def live_heatmap_chart_json(request):
         .order_by("timestamp")
     )
 
-    buckets = {}  # ts_iso -> {"timestamp":..., "sum":..., "count":..., "max":...}
+    buckets = {}
     for row in qs:
         ts = row["timestamp"]
         ts_key = ts.isoformat()
@@ -116,7 +125,7 @@ def live_heatmap_chart_json(request):
 @login_required
 def comments(request):
     if request.user.role != "patient":
-        return render(request, "403.html")
+        return render(request, "403.html", status=403)
 
     if request.method == "POST":
         form = CommentForm(request.POST, user=request.user)
@@ -129,16 +138,18 @@ def comments(request):
         form = CommentForm(user=request.user)
 
     comments_qs = Comment.objects.filter(patient=request.user).order_by("-timestamp")
-    return render(request, "patients/comments.html", {"form": form, "comments": comments_qs})
+    return render(
+        request,
+        "patients/comments.html",
+        {"form": form, "comments": comments_qs},
+    )
+
 
 @login_required
 def pressure_history_json(request):
     """
-    Historical pressure readings for the logged-in patient (CSV-uploaded or live).
-
-    Optional query params:
-      - since_minutes=1440 (default 1440 = last 24h)
-      - limit=20000
+    Historical pressure readings from DB PressureData.
+    (This is separate from daily CSV "past records".)
     """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
@@ -167,3 +178,158 @@ def pressure_history_json(request):
     ]
 
     return JsonResponse({"data": data})
+
+
+# -------------------------
+# Past Records (Daily CSV files) stored as PressureUpload.csv_file
+# -------------------------
+
+@login_required
+def past_days_json(request):
+    """
+    List available days that have a PressureUpload CSV.
+    Returns: { data: [{day, upload_id, timestamp, uploaded_at, rows, cols}, ...] }
+    """
+    if request.user.role != "patient":
+        return JsonResponse({"error": "forbidden"}, status=403)
+
+    limit_days = int(request.GET.get("limit", "30"))
+    limit_days = max(1, min(limit_days, 366))
+
+    uploads = PressureUpload.objects.filter(patient=request.user).order_by("-timestamp")
+
+    # day_str -> latest upload for that day
+    day_map = {}
+    for u in uploads:
+        day_str = timezone.localtime(u.timestamp).date().isoformat()
+        if day_str not in day_map:
+            day_map[day_str] = u
+        if len(day_map) >= limit_days:
+            break
+
+    data = [
+        {
+            "day": day,
+            "upload_id": u.id,
+            "timestamp": u.timestamp.isoformat(),
+            "uploaded_at": u.uploaded_at.isoformat(),
+            "rows": u.rows,
+            "cols": u.cols,
+        }
+        for day, u in sorted(day_map.items(), key=lambda x: x[0], reverse=True)
+    ]
+    return JsonResponse({"data": data})
+
+
+@login_required
+def past_day_grid_json(request):
+    """
+    Return the matrix for a selected day by reading PressureUpload.csv_file.
+
+    Query params:
+      - day (required): YYYY-MM-DD
+      - max_rows (optional, default 60)
+      - max_cols (optional, default 60)
+
+    Returns:
+      { day, upload_id, timestamp, rows, cols, matrix, downsampled, ... }
+    """
+    if request.user.role != "patient":
+        return JsonResponse({"error": "forbidden"}, status=403)
+
+    day_raw = (request.GET.get("day") or "").strip()
+    if not day_raw:
+        return JsonResponse({"error": "missing day"}, status=400)
+
+    day = parse_date(day_raw)
+    if not day:
+        return JsonResponse({"error": f"day not parseable: {day_raw}"}, status=400)
+
+    max_rows = int(request.GET.get("max_rows", "60"))
+    max_cols = int(request.GET.get("max_cols", "60"))
+    max_rows = max(5, min(max_rows, 400))
+    max_cols = max(5, min(max_cols, 400))
+
+    tz = timezone.get_current_timezone()
+    start_local = timezone.make_aware(datetime(day.year, day.month, day.day, 0, 0, 0), tz)
+    end_local = start_local + timedelta(days=1)
+
+    upload = (
+        PressureUpload.objects.filter(
+            patient=request.user,
+            timestamp__gte=start_local,
+            timestamp__lt=end_local,
+        )
+        .order_by("-timestamp")
+        .first()
+    )
+    if not upload:
+        return JsonResponse({"error": "not found"}, status=404)
+
+    full_matrix = []
+    max_cols_seen = 0
+
+    with upload.csv_file.open("rb") as fh:
+        wrapper = _open_csv_text(fh)
+        reader = csv.reader(wrapper)
+
+        for row in reader:
+            if not row:
+                continue
+
+            out_row = []
+            for cell in row:
+                raw = (cell or "").strip()
+                if raw == "":
+                    out_row.append(0.0)
+                else:
+                    try:
+                        out_row.append(float(raw))
+                    except ValueError:
+                        out_row.append(0.0)
+
+            max_cols_seen = max(max_cols_seen, len(out_row))
+            full_matrix.append(out_row)
+
+    source_rows = len(full_matrix)
+    source_cols = max_cols_seen
+
+    if source_rows == 0 or source_cols == 0:
+        return JsonResponse(
+            {
+                "day": day.isoformat(),
+                "upload_id": upload.id,
+                "timestamp": upload.timestamp.isoformat(),
+                "rows": 0,
+                "cols": 0,
+                "matrix": [],
+                "downsampled": False,
+            }
+        )
+
+    row_step = max(1, (source_rows + max_rows - 1) // max_rows)
+    col_step = max(1, (source_cols + max_cols - 1) // max_cols)
+
+    matrix = []
+    for r in range(0, source_rows, row_step):
+        src = full_matrix[r]
+        ds_row = []
+        for c in range(0, source_cols, col_step):
+            ds_row.append(src[c] if c < len(src) else 0.0)
+        matrix.append(ds_row)
+
+    return JsonResponse(
+        {
+            "day": day.isoformat(),
+            "upload_id": upload.id,
+            "timestamp": upload.timestamp.isoformat(),
+            "rows": len(matrix),
+            "cols": max(len(r) for r in matrix) if matrix else 0,
+            "matrix": matrix,
+            "downsampled": (row_step > 1 or col_step > 1),
+            "source_rows": source_rows,
+            "source_cols": source_cols,
+            "row_step": row_step,
+            "col_step": col_step,
+        }
+    )
