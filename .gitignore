@@ -11,6 +11,8 @@ __pycache__/
 *.py[cod]
 
 # Django
+**/migrations/
+!**/migrations/__init__.py
 *.log
 <<<<<<< HEAD
 local_settings.py
@@ -42,6 +44,7 @@ node_modules/
 *.sqlite3
 media/
 staticfiles/
+pressure_uploads/
 
 # Virtual environments
 .env

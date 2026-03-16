@@ -232,7 +232,10 @@ def past_day_grid_json(request):
       - max_cols (optional, default 60)
 
     Returns:
-      { day, upload_id, timestamp, rows, cols, matrix, downsampled, ... }
+      {
+        day, upload_id, timestamp, rows, cols, matrix, downsampled,
+        source_rows, source_cols, row_step, col_step
+      }
     """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
@@ -268,15 +271,12 @@ def past_day_grid_json(request):
 
     full_matrix = []
     max_cols_seen = 0
-
     with upload.csv_file.open("rb") as fh:
         wrapper = _open_csv_text(fh)
         reader = csv.reader(wrapper)
-
         for row in reader:
             if not row:
                 continue
-
             out_row = []
             for cell in row:
                 raw = (cell or "").strip()
@@ -287,7 +287,6 @@ def past_day_grid_json(request):
                         out_row.append(float(raw))
                     except ValueError:
                         out_row.append(0.0)
-
             max_cols_seen = max(max_cols_seen, len(out_row))
             full_matrix.append(out_row)
 
@@ -295,17 +294,19 @@ def past_day_grid_json(request):
     source_cols = max_cols_seen
 
     if source_rows == 0 or source_cols == 0:
-        return JsonResponse(
-            {
-                "day": day.isoformat(),
-                "upload_id": upload.id,
-                "timestamp": upload.timestamp.isoformat(),
-                "rows": 0,
-                "cols": 0,
-                "matrix": [],
-                "downsampled": False,
-            }
-        )
+        return JsonResponse({
+            "day": day.isoformat(),
+            "upload_id": upload.id,
+            "timestamp": upload.timestamp.isoformat(),
+            "rows": 0,
+            "cols": 0,
+            "matrix": [],
+            "downsampled": False,
+            "source_rows": 0,
+            "source_cols": 0,
+            "row_step": 1,
+            "col_step": 1,
+        })
 
     row_step = max(1, (source_rows + max_rows - 1) // max_rows)
     col_step = max(1, (source_cols + max_cols - 1) // max_cols)
@@ -318,18 +319,16 @@ def past_day_grid_json(request):
             ds_row.append(src[c] if c < len(src) else 0.0)
         matrix.append(ds_row)
 
-    return JsonResponse(
-        {
-            "day": day.isoformat(),
-            "upload_id": upload.id,
-            "timestamp": upload.timestamp.isoformat(),
-            "rows": len(matrix),
-            "cols": max(len(r) for r in matrix) if matrix else 0,
-            "matrix": matrix,
-            "downsampled": (row_step > 1 or col_step > 1),
-            "source_rows": source_rows,
-            "source_cols": source_cols,
-            "row_step": row_step,
-            "col_step": col_step,
-        }
-    )
+    return JsonResponse({
+        "day": day.isoformat(),
+        "upload_id": upload.id,
+        "timestamp": upload.timestamp.isoformat(),
+        "rows": len(matrix),
+        "cols": max(len(r) for r in matrix) if matrix else 0,
+        "matrix": matrix,
+        "downsampled": (row_step > 1 or col_step > 1),
+        "source_rows": source_rows,
+        "source_cols": source_cols,
+        "row_step": row_step,
+        "col_step": col_step,
+    })
