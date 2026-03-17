@@ -5,12 +5,27 @@ This Is The Repository for Group3's Advanced Web Solution Project
 
 A Django GraphQL application for managing patients and clinicians.
 
-### Implemented User Stories
+### User Stories
 
-1. **As a clinician, I want to see a list of patients so that I can select who to review**
+1. **As a patient, I want to receive notifications when my pressure is too high so that I can adjust my sitting position.**
+   - Real-time pressure monitoring alerts
+   - Threshold settings for high pressure
+   - Visual and/or email notification support
+
+2. **As a clinician, I want to see a list of patients so that I can select who to review.**
    - GraphQL API for querying patient lists
    - Search and filter functionality
    - Comprehensive patient profiles
+
+3. **As a clinician, I want to read patient comments linked to specific data points so that I can better understand their discomfort.**
+   - Comments attached to readings or events
+   - Timeline view for context
+   - Queryable via API
+
+4. **As an admin, I want to assign roles so that users have the correct permissions.**
+   - Role-based access control
+   - Admin UI for role assignment
+   - Permission checks in APIs
 
 ### Features
 
