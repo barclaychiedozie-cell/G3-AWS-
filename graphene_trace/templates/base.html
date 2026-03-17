@@ -32,5 +32,8 @@
     <main class="container">
       {% block content %}{% endblock %}
     </main>
+
+    {# Allow child templates to add scripts at the bottom of <body> #}
+    {% block scripts %}{% endblock %}
   </body>
 </html>

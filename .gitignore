@@ -1,3 +1,22 @@
+<<<<<<< HEAD
+<<<<<<< HEAD
+# Byte-compiled / optimized / DLL files
+=======
+# Python
+>>>>>>> cbca9ab3038fd01d575a2c159cd5d74d71171e89
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.py[cod]
+
+# Django
+**/migrations/
+!**/migrations/__init__.py
+*.log
+<<<<<<< HEAD
+local_settings.py
+=======
 # Python
 __pycache__/
 *.pyc
@@ -9,9 +28,55 @@ __pycache__/
 *.log
 *.pot
 *.sqlite3
+<<<<<<< HEAD
+>>>>>>> 1d0327f (Add .gitignore and remove tracked __pycache__/db.sqlite3 files from version control)
+db.sqlite3
+=======
+>>>>>>> 05c541b (Remove duplicate db.sqlite3 entry from .gitignore (already covered by *.sqlite3))
 media/
 staticfiles/
 
+<<<<<<< HEAD
+# If using node for frontend assets
+node_modules/
+=======
+*.pot
+*.sqlite3
+media/
+staticfiles/
+pressure_uploads/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+>>>>>>> cbca9ab3038fd01d575a2c159cd5d74d71171e89
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+<<<<<<< HEAD
+desktop.ini
+
+# Editor temporary files
+*~
+*.swp
+
+# Logs
+*.log
+
+# Ignore compiled C extensions
+*.egg
+
+# End of .gitignore
+=======
 # Virtual environments
 .env
 .venv
@@ -27,3 +92,6 @@ venv/
 # OS
 .DS_Store
 Thumbs.db
+>>>>>>> 1d0327f (Add .gitignore and remove tracked __pycache__/db.sqlite3 files from version control)
+=======
+>>>>>>> cbca9ab3038fd01d575a2c159cd5d74d71171e89
