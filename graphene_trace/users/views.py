@@ -13,7 +13,7 @@ class RoleBasedLoginView(auth_views.LoginView):
 			return str(reverse_lazy("admin:index"))
 		if getattr(user, "role", "") == "clinician":
 			return str(reverse_lazy("clinician_dashboard"))
-		return str(reverse_lazy("dashboard"))
+		return str(reverse_lazy("patient_dashboard"))
 
 
 def role_home_redirect(request):
@@ -24,4 +24,4 @@ def role_home_redirect(request):
 		return redirect("admin:index")
 	if getattr(request.user, "role", "") == "clinician":
 		return redirect("clinician_dashboard")
-	return redirect("dashboard")
+	return redirect("patient_dashboard")

@@ -6,7 +6,7 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from patients.models import Comment, PressureData
+from patients.models import Comment, Notification, PressureData
 from patients.forms import CommentForm
 
 User = get_user_model()
@@ -36,6 +36,12 @@ def dashboard(request):
                 text=text,
                 is_reply=True,
             )
+            clinician_name = request.user.get_full_name().strip() or request.user.username
+            Notification.objects.create(
+                patient=target_patient,
+                message=f"New message from {clinician_name}: {text[:90]}",
+                is_read=False,
+            )
             return redirect(f"/clinician/dashboard/?thread_patient_id={target_patient.id}")
 
     selected_patient_id = request.GET.get("thread_patient_id")
@@ -53,7 +59,7 @@ def dashboard(request):
         thread_messages = (
             Comment.objects.filter(patient=selected_patient)
             .select_related("patient", "clinician")
-            .order_by("-timestamp")[:12]
+            .order_by("timestamp")
         )
 
     return render(

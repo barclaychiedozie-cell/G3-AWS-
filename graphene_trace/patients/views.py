@@ -33,9 +33,12 @@ def dashboard(request):
                 patient=request.user,
                 clinician=target_clinician,
                 text=feedback_text,
-                is_reply=True,
+                # In feedback threads, patient messages are "not reply" and clinician messages are reply.
+                is_reply=False,
             )
-            return redirect("dashboard")
+            if target_clinician:
+                return redirect(f"/patient/dashboard/?thread_clinician_id={target_clinician.id}")
+            return redirect("patient_dashboard")
 
     # Latest notifications on the dashboard (most recent first)
     notifications = (
@@ -43,22 +46,42 @@ def dashboard(request):
         .order_by("-timestamp")[:10]
     )
 
-    feedback_messages = list(
-        Comment.objects.filter(patient=request.user)
-        .select_related("patient", "clinician")
-        .order_by("-timestamp")[:8]
-    )
-
-    clinicians = User.objects.filter(role="clinician").order_by("username")
-    if any(msg.clinician_id for msg in feedback_messages):
-        clinicians = (
-            User.objects.filter(
-                role="clinician",
-                clinician_comments__patient=request.user,
-            )
-            .distinct()
-            .order_by("username")
+    clinicians = (
+        User.objects.filter(
+            role="clinician",
+            clinician_comments__patient=request.user,
         )
+        .distinct()
+        .order_by("username")
+    )
+    if not clinicians.exists():
+        clinicians = User.objects.filter(role="clinician").order_by("username")
+
+    selected_clinician_id = request.GET.get("thread_clinician_id")
+    selected_clinician = None
+    if selected_clinician_id:
+        try:
+            selected_clinician = clinicians.get(id=int(selected_clinician_id))
+        except (TypeError, ValueError, User.DoesNotExist):
+            selected_clinician = None
+    if not selected_clinician:
+        selected_clinician = clinicians.first()
+
+    feedback_messages = Comment.objects.none()
+    if selected_clinician:
+        feedback_messages = (
+            Comment.objects.filter(
+                patient=request.user,
+                clinician=selected_clinician,
+            )
+            .select_related("patient", "clinician")
+            .order_by("timestamp")
+        )
+
+    unread_notifications_count = Notification.objects.filter(
+        patient=request.user,
+        is_read=False,
+    ).count()
 
     return render(
         request,
@@ -67,6 +90,8 @@ def dashboard(request):
             "notifications": notifications,
             "feedback_messages": feedback_messages,
             "clinicians": clinicians,
+            "selected_clinician": selected_clinician,
+            "unread_notifications_count": unread_notifications_count,
         },
     )
 
