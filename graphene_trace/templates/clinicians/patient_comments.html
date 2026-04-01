@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Comments for {{ patient.username }}</h1>
+
+<form method="post">
+  {% csrf_token %}
+  {{ form.as_p }}
+  <button type="submit">Reply</button>
+</form>
+
+<hr>
+
+{% for comment in comments %}
+  <div style="margin-bottom:16px;">
+    <p><strong>
+      {% if comment.is_reply %}
+        Clinician
+      {% else %}
+        Patient
+      {% endif %}
+    </strong> — {{ comment.timestamp }}</p>
+    <p>{{ comment.text }}</p>
+  </div>
+{% empty %}
+  <p>No comments yet.</p>
+{% endfor %}
+{% endblock %}

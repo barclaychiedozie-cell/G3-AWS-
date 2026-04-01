@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Clinician Dashboard</h1>
+
+<form method="get">
+  <input type="text" name="q" value="{{ query }}" placeholder="Search by patient name or ID">
+  <button type="submit">Search</button>
+</form>
+
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th>Priority</th>
+      <th>Name</th>
+      <th>Username</th>
+      <th>ID Number</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for patient in patients %}
+    <tr>
+      <td>{% if patient.high_priority %}High{% else %}Normal{% endif %}</td>
+      <td>{{ patient.first_name }} {{ patient.last_name }}</td>
+      <td>{{ patient.username }}</td>
+      <td>{{ patient.id_number|default:"-" }}</td>
+      <td>
+        <a href="{% url 'patient_comments' patient.id %}">Open</a>
+        <form method="post" action="{% url 'toggle_priority' patient.id %}" style="display:inline;">
+          {% csrf_token %}
+          <button type="submit">
+            {% if patient.high_priority %}Remove priority{% else %}Mark high priority{% endif %}
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="5">No patients found.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
