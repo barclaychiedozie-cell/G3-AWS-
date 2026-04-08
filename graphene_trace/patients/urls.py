@@ -16,4 +16,8 @@ urlpatterns = [
     # Past (CSV files via PressureUpload)
     path("api/past-days/", views.past_days_json, name="past_days_json"),
     path("api/past-day-grid/", views.past_day_grid_json, name="past_day_grid_json"),
+
+    # Messages (patient/clinician chat)
+    path("messages/<int:user_id>/", views.message_thread_api, name="message_thread_api"),
+    path("api/messages/", views.message_thread_api, name="message_thread_api_legacy"),
 ]

@@ -18,6 +18,8 @@
     </div>
   </div>
 
+  <div class="notice chat-banner" data-chat-banner role="status" aria-live="polite" style="display:none;"></div>
+
   <div class="dash-grid">
     <section class="card">
       <div class="card-head">
@@ -35,68 +37,7 @@
     </section>
 
     <aside class="stack">
-      <section class="card">
-        <h2 class="h2">Feedback Conversation</h2>
-        {% if patients %}
-          <form method="get" style="margin-top:8px;">
-            <div class="form-row">
-              <label for="id_thread_patient_id">Select patient</label>
-              <select id="id_thread_patient_id" name="thread_patient_id" onchange="this.form.submit()">
-                {% for p in patients %}
-                  <option value="{{ p.id }}" {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}>
-                    {{ p.get_full_name|default:p.username }}
-                  </option>
-                {% endfor %}
-              </select>
-            </div>
-          </form>
-
-          {% if selected_patient %}
-            <div class="small" style="margin-bottom:8px;">
-              Chat with <strong>{{ selected_patient.get_full_name|default:selected_patient.username }}</strong>
-            </div>
-          {% endif %}
-
-          <form method="post" style="margin-top:10px;">
-            {% csrf_token %}
-            {% if selected_patient %}
-              <input type="hidden" name="message_patient_id" value="{{ selected_patient.id }}">
-            {% endif %}
-
-            <div class="chat-window">
-              <div class="chat-messages">
-                {% if thread_messages %}
-                  {% for msg in thread_messages %}
-                    {% if msg.is_reply %}
-                      <div class="chat-msg sent">
-                        <div class="chat-sender">You</div>
-                        <div class="chat-bubble">{{ msg.text }}</div>
-                        <div class="chat-time">{{ msg.timestamp }}</div>
-                      </div>
-                    {% else %}
-                      <div class="chat-msg received">
-                        <div class="chat-sender">{{ msg.patient.get_full_name|default:msg.patient.username }}</div>
-                        <div class="chat-bubble">{{ msg.text }}</div>
-                        <div class="chat-time">{{ msg.timestamp }}</div>
-                      </div>
-                    {% endif %}
-                  {% endfor %}
-                {% else %}
-                  <p class="p chat-empty" style="margin:0;">No messages in this thread yet.</p>
-                {% endif %}
-              </div>
-            </div>
-
-            <div class="chat-input-row">
-              <textarea id="id_message_text" name="message_text" rows="1" placeholder="Enter message"></textarea>
-              <button class="chat-send-btn" type="submit" aria-label="Send message">&#10148;</button>
-            </div>
-          </form>
-        {% else %}
-          <p class="p" style="margin:0;">No patients available.</p>
-        {% endif %}
-      </section>
-
+      {% include "components/chat_box.html" with chat_select_mode=True %}
     </aside>
   </div>
 
@@ -105,4 +46,5 @@
     window.CLINICIAN_COMPARISON_REPORT_URL = "{% url 'clinician_comparison_report_json' %}";
   </script>
   <script src="{% static 'js/clinician_comparison_chart.js' %}"></script>
+  <script src="{% static 'js/chat.js' %}"></script>
 {% endblock %}

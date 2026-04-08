@@ -1,17 +1,20 @@
 import csv
+import json
 import re
 from datetime import datetime, timedelta
 from io import TextIOWrapper
 
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
 from django.utils.dateparse import parse_date, parse_datetime
+from django.views.decorators.http import require_http_methods
 
 from .forms import CommentForm
-from .models import Comment, Notification, PressureData, PressureUpload
+from .models import Comment, Message, Notification, PressureData, PressureUpload
 
 
 SENSOR_RE = re.compile(r"r(\d+)_c(\d+)$")
@@ -27,6 +30,19 @@ def _open_csv_text(fh):
         return TextIOWrapper(fh, encoding="cp1252", errors="replace", newline="")
 
 User = get_user_model()
+
+
+def _can_message(sender, receiver):
+    if sender.role == "patient" and receiver.role == "clinician":
+        return True
+    if sender.role == "clinician" and receiver.role == "patient":
+        return True
+    return False
+
+
+def _display_name(user):
+    full_name = (user.get_full_name() or "").strip()
+    return full_name or user.username
 
 
 @login_required
@@ -107,6 +123,21 @@ def dashboard(request):
             .order_by("timestamp")
         )
 
+    chat_messages = []
+    last_chat_message_id = 0
+    if selected_clinician:
+        chat_qs = (
+            Message.objects.filter(
+                Q(sender=request.user, receiver=selected_clinician)
+                | Q(sender=selected_clinician, receiver=request.user)
+            )
+            .select_related("sender", "receiver")
+            .order_by("-timestamp")[:30]
+        )
+        chat_messages = list(reversed(chat_qs))
+        if chat_messages:
+            last_chat_message_id = chat_messages[-1].id
+
     unread_notifications_count = Notification.objects.filter(
         patient=request.user,
         is_read=False,
@@ -121,6 +152,9 @@ def dashboard(request):
             "clinicians": clinicians,
             "selected_clinician": selected_clinician,
             "unread_notifications_count": unread_notifications_count,
+            "chat_messages": chat_messages,
+            "last_chat_message_id": last_chat_message_id,
+            "chat_other_user": selected_clinician,
         },
     )
 
@@ -229,6 +263,106 @@ def comments(request):
         request,
         "patients/comments.html",
         {"form": form, "comments": comments_qs},
+    )
+
+
+@login_required
+@require_http_methods(["GET", "POST"])
+def message_thread_api(request, user_id=None):
+    if request.method == "GET":
+        other_user_raw = (str(user_id) if user_id is not None else request.GET.get("user_id") or "").strip()
+        after_id_raw = (request.GET.get("after_id") or "").strip()
+
+        try:
+            other_user_id = int(other_user_raw)
+        except ValueError:
+            return JsonResponse({"error": "invalid user_id"}, status=400)
+
+        try:
+            other_user = User.objects.get(id=other_user_id)
+        except User.DoesNotExist:
+            return JsonResponse({"error": "user not found"}, status=404)
+
+        if not _can_message(request.user, other_user):
+            return JsonResponse({"error": "forbidden"}, status=403)
+
+        qs = Message.objects.filter(
+            Q(sender=request.user, receiver=other_user)
+            | Q(sender=other_user, receiver=request.user)
+        ).select_related("sender", "receiver")
+
+        if after_id_raw:
+            try:
+                after_id = int(after_id_raw)
+                qs = qs.filter(id__gt=after_id)
+            except ValueError:
+                return JsonResponse({"error": "invalid after_id"}, status=400)
+
+        messages = [
+            {
+                "id": m.id,
+                "sender_id": m.sender_id,
+                "sender_name": _display_name(m.sender),
+                "sender_label": _display_name(m.sender),
+                "content": m.content,
+                "timestamp": timezone.localtime(m.timestamp).isoformat(),
+            }
+            for m in qs.order_by("timestamp")
+        ]
+
+        return JsonResponse({"messages": messages})
+
+    payload = {}
+    if request.body:
+        try:
+            payload = json.loads(request.body.decode("utf-8"))
+        except json.JSONDecodeError:
+            payload = {}
+
+    receiver_raw = (
+        payload.get("receiver_id")
+        or request.POST.get("receiver_id")
+        or (str(user_id) if user_id is not None else None)
+    )
+    content = (payload.get("content") or request.POST.get("content") or "").strip()
+
+    if not receiver_raw:
+        return JsonResponse({"error": "missing receiver_id"}, status=400)
+
+    try:
+        receiver_id = int(receiver_raw)
+    except ValueError:
+        return JsonResponse({"error": "invalid receiver_id"}, status=400)
+
+    try:
+        receiver = User.objects.get(id=receiver_id)
+    except User.DoesNotExist:
+        return JsonResponse({"error": "receiver not found"}, status=404)
+
+    if not content:
+        return JsonResponse({"error": "empty message"}, status=400)
+
+    if not _can_message(request.user, receiver):
+        return JsonResponse({"error": "forbidden"}, status=403)
+
+    message = Message.objects.create(
+        sender=request.user,
+        receiver=receiver,
+        content=content,
+    )
+
+    return JsonResponse(
+        {
+            "message": {
+                "id": message.id,
+                "sender_id": message.sender_id,
+                "sender_name": _display_name(message.sender),
+                "sender_label": _display_name(message.sender),
+                "content": message.content,
+                "timestamp": timezone.localtime(message.timestamp).isoformat(),
+            }
+        },
+        status=201,
     )
 
 

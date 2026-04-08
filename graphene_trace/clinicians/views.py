@@ -1,12 +1,13 @@
 from datetime import timedelta
 
+from django.db.models import Q
 from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
 from django.utils import timezone
 
-from patients.models import Comment, Notification, PressureData
+from patients.models import Comment, Message, PressureData
 from patients.forms import CommentForm
 
 User = get_user_model()
@@ -19,31 +20,6 @@ def dashboard(request):
 
     patients = User.objects.filter(role="patient").order_by("username")
 
-    if request.method == "POST":
-        text = (request.POST.get("message_text") or "").strip()
-        patient_id_raw = request.POST.get("message_patient_id")
-
-        target_patient = None
-        try:
-            target_patient = patients.get(id=int(patient_id_raw))
-        except (TypeError, ValueError, User.DoesNotExist):
-            target_patient = None
-
-        if target_patient and text:
-            Comment.objects.create(
-                patient=target_patient,
-                clinician=request.user,
-                text=text,
-                is_reply=True,
-            )
-            clinician_name = request.user.get_full_name().strip() or request.user.username
-            Notification.objects.create(
-                patient=target_patient,
-                message=f"New message from {clinician_name}: {text[:90]}",
-                is_read=False,
-            )
-            return redirect(f"/clinician/dashboard/?thread_patient_id={target_patient.id}")
-
     selected_patient_id = request.GET.get("thread_patient_id")
     selected_patient = None
     if selected_patient_id:
@@ -54,13 +30,20 @@ def dashboard(request):
     if not selected_patient:
         selected_patient = patients.first()
 
-    thread_messages = Comment.objects.none()
+    chat_messages = []
+    last_chat_message_id = 0
     if selected_patient:
-        thread_messages = (
-            Comment.objects.filter(patient=selected_patient)
-            .select_related("patient", "clinician")
-            .order_by("timestamp")
+        chat_qs = (
+            Message.objects.filter(
+                Q(sender=request.user, receiver=selected_patient)
+                | Q(sender=selected_patient, receiver=request.user)
+            )
+            .select_related("sender", "receiver")
+            .order_by("-timestamp")[:30]
         )
+        chat_messages = list(reversed(chat_qs))
+        if chat_messages:
+            last_chat_message_id = chat_messages[-1].id
 
     return render(
         request,
@@ -68,7 +51,9 @@ def dashboard(request):
         {
             "patients": patients,
             "selected_patient": selected_patient,
-            "thread_messages": thread_messages,
+            "chat_messages": chat_messages,
+            "last_chat_message_id": last_chat_message_id,
+            "chat_other_user": selected_patient,
         },
     )
 
