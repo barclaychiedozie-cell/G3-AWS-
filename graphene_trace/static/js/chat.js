@@ -7,7 +7,9 @@
   const input = root.querySelector("[data-chat-input]");
   const status = root.querySelector("[data-chat-status]");
   const banner = document.querySelector("[data-chat-banner]");
-  const notifDot = document.querySelector("[data-notif-dot]");
+  const notifBadge = document.querySelector("[data-notif-badge]");
+  const messageBadge = root.querySelector("[data-message-badge]");
+  const select = root.querySelector("[data-chat-select]");
 
   const apiUrl = root.dataset.apiUrl;
   const currentUserId = Number(root.dataset.currentUserId || 0);
@@ -16,7 +18,7 @@
   let lastMessageId = Number(root.dataset.lastMessageId || 0);
   let isFetching = false;
   let bannerTimer = null;
-  let dotTimer = null;
+  let pulseTimer = null;
   let highlightTimer = null;
 
   if (!apiUrl || !otherUserId || !list) return;
@@ -85,10 +87,9 @@
     }
   }
 
-  function showBanner(senderName) {
+  function showBanner(text) {
     if (!banner) return;
-    const name = senderName || "New message";
-    banner.textContent = `New message from ${name}`;
+    banner.textContent = text || "New message";
     banner.style.display = "block";
     banner.classList.remove("is-hiding");
     banner.classList.add("is-visible");
@@ -104,13 +105,26 @@
     }, 5000);
   }
 
-  function activateNotifDot() {
-    if (!notifDot) return;
-    notifDot.classList.add("is-active");
-    if (dotTimer) clearTimeout(dotTimer);
-    dotTimer = setTimeout(() => {
-      notifDot.classList.remove("is-active");
-    }, 6000);
+  function setBadge(badge, count) {
+    if (!badge) return;
+    if (count && count > 0) {
+      badge.textContent = String(count);
+      badge.classList.add("is-active");
+    } else {
+      badge.textContent = "";
+      badge.classList.remove("is-active");
+    }
+  }
+
+  function pulseBadge(badge) {
+    if (!badge) return;
+    badge.classList.remove("badge--pulse");
+    void badge.offsetWidth;
+    badge.classList.add("badge--pulse");
+    if (pulseTimer) clearTimeout(pulseTimer);
+    pulseTimer = setTimeout(() => {
+      badge.classList.remove("badge--pulse");
+    }, 900);
   }
 
   function highlightChat() {
@@ -121,7 +135,7 @@
     }, 1200);
   }
 
-  function appendMessages(messages, isFromPoll) {
+  function appendMessages(messages, isFromPoll, meta) {
     if (!Array.isArray(messages) || messages.length === 0) return;
     clearEmptyState();
 
@@ -149,8 +163,16 @@
     scrollToBottom(true);
 
     if (hasIncoming && isFromPoll) {
-      showBanner(incomingName);
-      activateNotifDot();
+      const unreadCount = meta && meta.unread_messages_from_other;
+      const name = (meta && meta.other_user_name) || incomingName || "New message";
+      const bannerText = unreadCount && unreadCount > 1
+        ? `${unreadCount} new messages from ${name}`
+        : `New message from ${name}`;
+      showBanner(bannerText);
+      pulseBadge(messageBadge);
+      if (notifBadge && meta && meta.notification_badge_total) {
+        pulseBadge(notifBadge);
+      }
       highlightChat();
     }
   }
@@ -164,7 +186,25 @@
       const resp = await fetch(url, { headers: { Accept: "application/json" } });
       if (!resp.ok) throw new Error("fetch failed");
       const payload = await resp.json();
-      appendMessages(payload.messages || [], true);
+      if (payload.meta) {
+        setBadge(messageBadge, payload.meta.unread_messages_total || 0);
+        setBadge(notifBadge, payload.meta.notification_badge_total || 0);
+
+        if (select && Array.isArray(payload.meta.unread_by_sender)) {
+          const counts = payload.meta.unread_by_sender.reduce(function (acc, row) {
+            acc[Number(row.sender_id)] = Number(row.count || 0);
+            return acc;
+          }, {});
+
+          Array.prototype.forEach.call(select.options, function (opt) {
+            const base = opt.getAttribute("data-base-label") || opt.textContent;
+            const count = counts[Number(opt.value)] || 0;
+            opt.textContent = count > 0 ? `${base} (${count})` : base;
+          });
+        }
+      }
+
+      appendMessages(payload.messages || [], true, payload.meta || null);
     } catch (err) {
       if (status) status.textContent = "Unable to load messages.";
     } finally {
@@ -219,6 +259,12 @@
     form.addEventListener("submit", (event) => {
       event.preventDefault();
       sendMessage(input ? input.value : "");
+    });
+  }
+
+  if (banner) {
+    banner.addEventListener("click", () => {
+      root.scrollIntoView({ behavior: "smooth", block: "start" });
     });
   }
 

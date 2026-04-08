@@ -4,13 +4,13 @@ import re
 from datetime import datetime, timedelta
 from io import TextIOWrapper
 
-from django.contrib.auth.decorators import login_required
 from django.contrib.auth import get_user_model
-from django.db.models import Q
+from django.contrib.auth.decorators import login_required
+from django.db.models import Count, Q
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_date
 from django.views.decorators.http import require_http_methods
 
 from .forms import CommentForm
@@ -18,6 +18,9 @@ from .models import Comment, Message, Notification, PressureData, PressureUpload
 
 
 SENSOR_RE = re.compile(r"r(\d+)_c(\d+)$")
+
+
+User = get_user_model()
 
 
 def _open_csv_text(fh):
@@ -28,8 +31,6 @@ def _open_csv_text(fh):
         return TextIOWrapper(fh, encoding="utf-8-sig", errors="replace", newline="")
     except Exception:
         return TextIOWrapper(fh, encoding="cp1252", errors="replace", newline="")
-
-User = get_user_model()
 
 
 def _can_message(sender, receiver):
@@ -50,7 +51,6 @@ def dashboard(request):
     if request.user.role != "patient":
         return render(request, "403.html", status=403)
 
-
     if request.method == "POST":
         feedback_text = (request.POST.get("feedback_text") or "").strip()
         clinician_id_raw = request.POST.get("clinician_id")
@@ -66,21 +66,16 @@ def dashboard(request):
                 patient=request.user,
                 clinician=target_clinician,
                 text=feedback_text,
-                # In feedback threads, patient messages are "not reply" and clinician messages are reply.
                 is_reply=False,
             )
             if target_clinician:
                 return redirect(f"/patient/dashboard/?thread_clinician_id={target_clinician.id}")
             return redirect("patient_dashboard")
 
-    # Latest notifications on the dashboard (most recent first)
-
     notifications = (
         Notification.objects.filter(patient=request.user)
         .order_by("-timestamp")[:10]
     )
-
-
 
     feedback_messages = list(
         Comment.objects.filter(patient=request.user)
@@ -112,7 +107,6 @@ def dashboard(request):
     if not selected_clinician:
         selected_clinician = clinicians.first()
 
-    feedback_messages = Comment.objects.none()
     if selected_clinician:
         feedback_messages = (
             Comment.objects.filter(
@@ -143,6 +137,13 @@ def dashboard(request):
         is_read=False,
     ).count()
 
+    unread_messages_total = Message.objects.filter(
+        receiver=request.user,
+        is_read=False,
+    ).count()
+
+    notification_badge_count = unread_notifications_count + unread_messages_total
+
     return render(
         request,
         "patients/dashboard.html",
@@ -155,9 +156,10 @@ def dashboard(request):
             "chat_messages": chat_messages,
             "last_chat_message_id": last_chat_message_id,
             "chat_other_user": selected_clinician,
+            "unread_messages_total": unread_messages_total,
+            "notification_badge_count": notification_badge_count,
         },
     )
-
 
 
 @login_required
@@ -272,6 +274,7 @@ def message_thread_api(request, user_id=None):
     if request.method == "GET":
         other_user_raw = (str(user_id) if user_id is not None else request.GET.get("user_id") or "").strip()
         after_id_raw = (request.GET.get("after_id") or "").strip()
+        after_id = None
 
         try:
             other_user_id = int(other_user_raw)
@@ -310,7 +313,54 @@ def message_thread_api(request, user_id=None):
             for m in qs.order_by("timestamp")
         ]
 
-        return JsonResponse({"messages": messages})
+        unread_total_before = Message.objects.filter(
+            receiver=request.user,
+            is_read=False,
+        ).count()
+
+        unread_notifications = 0
+        if request.user.role == "patient":
+            unread_notifications = Notification.objects.filter(
+                patient=request.user,
+                is_read=False,
+            ).count()
+
+        mark_qs = Message.objects.filter(
+            sender=other_user,
+            receiver=request.user,
+            is_read=False,
+        )
+        if after_id is not None:
+            mark_qs = mark_qs.filter(id__gt=after_id)
+
+        new_unread_count = mark_qs.count()
+        if new_unread_count:
+            mark_qs.update(is_read=True)
+
+        unread_total_after = Message.objects.filter(
+            receiver=request.user,
+            is_read=False,
+        ).count()
+        unread_by_sender = (
+            Message.objects.filter(receiver=request.user, is_read=False)
+            .values("sender_id")
+            .annotate(count=Count("id"))
+        )
+
+        return JsonResponse(
+            {
+                "messages": messages,
+                "meta": {
+                    "unread_messages_total": unread_total_after,
+                    "unread_messages_from_other": new_unread_count,
+                    "unread_notifications_total": unread_notifications,
+                    "notification_badge_total": unread_notifications + unread_total_after,
+                    "other_user_name": _display_name(other_user),
+                    "unread_by_sender": list(unread_by_sender),
+                    "unread_messages_total_before": unread_total_before,
+                },
+            }
+        )
 
     payload = {}
     if request.body:
@@ -401,10 +451,6 @@ def pressure_history_json(request):
     return JsonResponse({"data": data})
 
 
-# -------------------------
-# Past Records (Daily CSV files) stored as PressureUpload.csv_file
-# -------------------------
-
 @login_required
 def past_days_json(request):
     """
@@ -419,7 +465,6 @@ def past_days_json(request):
 
     uploads = PressureUpload.objects.filter(patient=request.user).order_by("-timestamp")
 
-    # day_str -> latest upload for that day
     day_map = {}
     for u in uploads:
         day_str = timezone.localtime(u.timestamp).date().isoformat()
@@ -534,20 +579,26 @@ def past_day_grid_json(request):
 
     matrix = []
     for r in range(0, source_rows, row_step):
-        src = full_matrix[r]
-        ds_row = []
+        src_row = full_matrix[r]
+        out_row = []
         for c in range(0, source_cols, col_step):
-            ds_row.append(src[c] if c < len(src) else 0.0)
-        matrix.append(ds_row)
+            if c < len(src_row):
+                out_row.append(src_row[c])
+            else:
+                out_row.append(0.0)
+        matrix.append(out_row)
+
+    rows = len(matrix)
+    cols = max((len(r) for r in matrix), default=0)
 
     return JsonResponse({
         "day": day.isoformat(),
         "upload_id": upload.id,
         "timestamp": upload.timestamp.isoformat(),
-        "rows": len(matrix),
-        "cols": max(len(r) for r in matrix) if matrix else 0,
+        "rows": rows,
+        "cols": cols,
         "matrix": matrix,
-        "downsampled": (row_step > 1 or col_step > 1),
+        "downsampled": row_step > 1 or col_step > 1,
         "source_rows": source_rows,
         "source_cols": source_cols,
         "row_step": row_step,

@@ -66,7 +66,11 @@
       <div class="card-head" style="margin-bottom:6px;">
         <h2 class="h2" style="margin:0;">
           Notifications
-          <span class="notif-dot" data-notif-dot aria-hidden="true"></span>
+          <span
+            class="notif-badge {% if notification_badge_count %}is-active{% endif %}"
+            data-notif-badge
+            aria-live="polite"
+          >{% if notification_badge_count %}{{ notification_badge_count }}{% endif %}</span>
         </h2>
       </div>
       {% if notifications %}

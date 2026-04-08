@@ -203,18 +203,24 @@ input:focus, select:focus, textarea:focus {
   padding: 10px 10px;
 }
 .notif-msg { color: var(--text); margin-bottom: 6px; }
-.notif-dot {
-  display: inline-block;
-  width: 8px;
-  height: 8px;
+.notif-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 6px;
   border-radius: 999px;
   background: var(--danger);
-  margin-left: 6px;
+  color: #fff;
+  font-size: 11px;
+  margin-left: 8px;
   opacity: 0;
   transform: scale(0.6);
   transition: opacity .2s ease, transform .2s ease;
 }
-.notif-dot.is-active { opacity: 1; transform: scale(1); }
+.notif-badge.is-active { opacity: 1; transform: scale(1); }
+.badge--pulse { animation: badgePulse .8s ease; }
 
 /* --- Comments --- */
 .comment {
@@ -311,6 +317,7 @@ input:focus, select:focus, textarea:focus {
 .chat-banner {
   margin: 0 0 16px;
   display: none;
+  cursor: pointer;
 }
 .chat-banner.is-visible {
   display: block;
@@ -334,6 +341,12 @@ input:focus, select:focus, textarea:focus {
 @keyframes chatBannerOut {
   from { opacity: 1; transform: translateY(0); }
   to { opacity: 0; transform: translateY(-6px); }
+}
+
+@keyframes badgePulse {
+  0% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+  100% { transform: scale(1); }
 }
 
 /* --- Utility classes --- */

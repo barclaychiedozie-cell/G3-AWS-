@@ -1,6 +1,5 @@
 (function () {
   var chart;
-  var colors = ["#ef4444", "#3b82f6", "#22c55e", "#f59e0b", "#a855f7"];
 
   function initChart() {
     var canvas = document.getElementById("clinicianComparisonChart");
@@ -15,7 +14,10 @@
         datasets: [],
       },
       options: {
-        animation: false,
+        animation: {
+          duration: 250,
+          easing: "easeOutQuad",
+        },
         responsive: true,
         maintainAspectRatio: false,
         spanGaps: true,
@@ -37,13 +39,24 @@
     });
   }
 
-  function selectedPatientIds() {
-    var checks = document.querySelectorAll(".patient-checkbox:checked");
-    var ids = [];
-    checks.forEach(function (el) {
-      ids.push(el.value);
-    });
-    return ids;
+  function selectedPatientId() {
+    var selector = document.getElementById("comparisonPatientSelect");
+    if (!selector) {
+      return "";
+    }
+    return selector.value || "";
+  }
+
+  function selectedValue(id, fallback) {
+    var el = document.getElementById(id);
+    if (!el) return fallback;
+    return el.value || fallback;
+  }
+
+  function selectedDate(id) {
+    var el = document.getElementById(id);
+    if (!el) return "";
+    return el.value || "";
   }
 
   function updateChart(payload) {
@@ -55,11 +68,12 @@
     }
 
     chart.data.labels = (payload.labels || []).map(function (iso) {
-      return new Date(iso).toLocaleString();
+      var date = iso && iso.length === 10 ? new Date(iso + "T00:00:00") : new Date(iso);
+      return date.toLocaleDateString();
     });
 
     chart.data.datasets = (payload.datasets || []).map(function (set, idx) {
-      var color = colors[idx % colors.length];
+      var color = set.color || (idx === 0 ? "#3b82f6" : "#22c55e");
       return {
         label: set.label,
         data: set.data,
@@ -67,6 +81,8 @@
         backgroundColor: "transparent",
         tension: 0.25,
         pointRadius: 0,
+        pointHoverRadius: 3,
+        borderWidth: 2,
       };
     });
 
@@ -78,11 +94,21 @@
       return;
     }
 
-    var ids = selectedPatientIds();
+    var patientId = selectedPatientId();
     var url = new URL(window.CLINICIAN_COMPARISON_REPORT_URL, window.location.origin);
-    ids.forEach(function (id) {
-      url.searchParams.append("patient_ids", id);
-    });
+    if (patientId) {
+      url.searchParams.set("patient_id", patientId);
+    }
+
+    var source = selectedValue("comparisonSourceSelect", "live");
+    var metric = selectedValue("comparisonMetricSelect", "avg");
+    var startDate = selectedDate("comparisonStartDate");
+    var endDate = selectedDate("comparisonEndDate");
+
+    if (source) url.searchParams.set("source", source);
+    if (metric) url.searchParams.set("metric", metric);
+    if (startDate) url.searchParams.set("start_date", startDate);
+    if (endDate) url.searchParams.set("end_date", endDate);
 
     fetch(url.toString(), { credentials: "same-origin" })
       .then(function (res) {
@@ -99,9 +125,24 @@
     initChart();
     fetchComparison();
 
-    var selector = document.getElementById("patientSelector");
+    var selector = document.getElementById("comparisonPatientSelect");
     if (selector) {
       selector.addEventListener("change", fetchComparison);
+    }
+
+    var sourceSelect = document.getElementById("comparisonSourceSelect");
+    if (sourceSelect) {
+      sourceSelect.addEventListener("change", fetchComparison);
+    }
+
+    var metricSelect = document.getElementById("comparisonMetricSelect");
+    if (metricSelect) {
+      metricSelect.addEventListener("change", fetchComparison);
+    }
+
+    var applyBtn = document.getElementById("comparisonApply");
+    if (applyBtn) {
+      applyBtn.addEventListener("click", fetchComparison);
     }
 
     var refresh = document.getElementById("refreshComparison");

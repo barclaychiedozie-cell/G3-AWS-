@@ -8,7 +8,14 @@
   data-poll-ms="3000"
 >
   <div class="card-head" style="margin-bottom:6px;">
-    <h2 class="h2" style="margin:0;">Messages</h2>
+    <h2 class="h2" style="margin:0;">
+      Messages
+      <span
+        class="notif-badge message-badge {% if unread_messages_total %}is-active{% endif %}"
+        data-message-badge
+        aria-live="polite"
+      >{% if unread_messages_total %}{{ unread_messages_total }}{% endif %}</span>
+    </h2>
     {% if chat_other_user %}
       <div class="small">
         Chat with <strong>{{ chat_other_user.get_full_name|default:chat_other_user.username }}</strong>
@@ -20,10 +27,14 @@
     <form method="get" style="margin-top:6px;">
       <div class="form-row" style="margin:0 0 10px;">
         <label for="id_thread_user_id">Select patient</label>
-        <select id="id_thread_user_id" name="thread_patient_id" onchange="this.form.submit()">
+        <select id="id_thread_user_id" name="thread_patient_id" onchange="this.form.submit()" data-chat-select>
           {% for p in patients %}
-            <option value="{{ p.id }}" {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}>
-              {{ p.get_full_name|default:p.username }}
+            <option
+              value="{{ p.id }}"
+              data-base-label="{{ p.get_full_name|default:p.username }}"
+              {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}
+            >
+              {{ p.get_full_name|default:p.username }}{% if p.unread_count %} ({{ p.unread_count }}){% endif %}
             </option>
           {% endfor %}
         </select>

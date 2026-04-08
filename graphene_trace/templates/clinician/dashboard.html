@@ -26,10 +26,43 @@
         <div>
           <h2 class="h2">Comparison Report (Average Pressure)</h2>
           <p class="p" style="margin-bottom:0;">
-            Hourly averages for selected patients.
+            Daily averages for the selected patient.
           </p>
         </div>
       </div>
+
+      {% if patients %}
+        <div class="form-row" style="margin-top:0;">
+          <label for="comparisonPatientSelect">Select patient</label>
+          <select id="comparisonPatientSelect">
+            {% for p in patients %}
+              <option value="{{ p.id }}" {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}>
+                {{ p.get_full_name|default:p.username }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <div class="form-row" style="margin-top:0;">
+          <label>Report filters</label>
+          <div class="d-flex gap-2 flex-wrap align-items-center">
+            <select id="comparisonSourceSelect" aria-label="Data source">
+              <option value="both" selected>Live + Uploads</option>
+              <option value="live">Live data</option>
+              <option value="uploads">Uploads</option>
+            </select>
+            <select id="comparisonMetricSelect" aria-label="Metric">
+              <option value="avg" selected>Average</option>
+              <option value="max">Maximum</option>
+            </select>
+            <label class="small" for="comparisonStartDate">From</label>
+            <input type="date" id="comparisonStartDate" />
+            <label class="small" for="comparisonEndDate">To</label>
+            <input type="date" id="comparisonEndDate" />
+            <button id="comparisonApply" class="btn" type="button">Apply</button>
+          </div>
+        </div>
+      {% endif %}
 
       <div class="chart-wrap">
         <canvas id="clinicianComparisonChart"></canvas>

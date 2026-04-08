@@ -117,6 +117,7 @@ class Message(models.Model):
     )
     content = models.TextField()
     timestamp = models.DateTimeField(default=timezone.now)
+    is_read = models.BooleanField(default=False)
 
     class Meta:
         ordering = ["timestamp"]
