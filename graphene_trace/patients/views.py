@@ -34,7 +34,7 @@ def dashboard(request):
     if request.user.role != "patient":
         return render(request, "403.html", status=403)
 
-<<<<<<< HEAD
+
     if request.method == "POST":
         feedback_text = (request.POST.get("feedback_text") or "").strip()
         clinician_id_raw = request.POST.get("clinician_id")
@@ -58,22 +58,31 @@ def dashboard(request):
             return redirect("patient_dashboard")
 
     # Latest notifications on the dashboard (most recent first)
-=======
->>>>>>> origin/main
+
     notifications = (
         Notification.objects.filter(patient=request.user)
         .order_by("-timestamp")[:10]
     )
 
-<<<<<<< HEAD
-    clinicians = (
-        User.objects.filter(
-            role="clinician",
-            clinician_comments__patient=request.user,
-        )
-        .distinct()
-        .order_by("username")
+
+
+    feedback_messages = list(
+        Comment.objects.filter(patient=request.user)
+        .select_related("patient", "clinician")
+        .order_by("-timestamp")[:8]
     )
+
+    clinicians = User.objects.filter(role="clinician").order_by("username")
+    if any(msg.clinician_id for msg in feedback_messages):
+        clinicians = (
+            User.objects.filter(
+                role="clinician",
+                clinician_comments__patient=request.user,
+            )
+            .distinct()
+            .order_by("username")
+        )
+
     if not clinicians.exists():
         clinicians = User.objects.filter(role="clinician").order_by("username")
 
@@ -114,9 +123,7 @@ def dashboard(request):
             "unread_notifications_count": unread_notifications_count,
         },
     )
-=======
-    return render(request, "patients/dashboard.html", {"notifications": notifications})
->>>>>>> origin/main
+
 
 
 @login_required
