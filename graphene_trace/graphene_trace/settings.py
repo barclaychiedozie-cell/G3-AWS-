@@ -118,10 +118,6 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/6.0/howto/static-files/
 
-<<<<<<< HEAD
-STATIC_URL = '/static/'
-STATICFILES_DIRS = [ BASE_DIR / 'static' ]
-=======
 STATIC_URL = "/static/"
 
 # Optional: a project-level "static" folder (safe even if empty).
@@ -132,7 +128,6 @@ STATICFILES_DIRS = [
 
 # Required for `python manage.py collectstatic`
 STATIC_ROOT = BASE_DIR / "staticfiles"
->>>>>>> origin/main
 
 
 LOGIN_URL = "/accounts/login/"
