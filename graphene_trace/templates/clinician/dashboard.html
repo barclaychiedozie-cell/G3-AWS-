@@ -1,0 +1,199 @@
+{% extends "base.html" %}
+{% load static %}
+
+{% block content %}
+  <div class="notice chat-banner" data-chat-banner role="status" aria-live="polite" style="display:none;"></div>
+
+  <div class="clinician-layout">
+    <aside class="clinician-sidebar">
+      <section class="card">
+        <div class="card-head" style="margin-bottom:8px;">
+          <h2 class="h2" style="margin:0;">Patient List</h2>
+        </div>
+
+        <div class="sidebar-filters">
+          <div class="filter-group">
+            <label class="checkbox-row">
+              <input type="checkbox" />
+              <span>High Pressure Alerts</span>
+            </label>
+            <label class="checkbox-row">
+              <input type="checkbox" />
+              <span>New Notifications</span>
+            </label>
+          </div>
+
+          {% if patients %}
+            <div class="form-row" style="margin:10px 0 0;">
+              <label for="comparisonPatientSelect">Select patient</label>
+              <select id="comparisonPatientSelect">
+                {% for p in patients %}
+                  <option value="{{ p.id }}" {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}>
+                    {{ p.get_full_name|default:p.username }}
+                  </option>
+                {% endfor %}
+              </select>
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="patient-list" role="list">
+          {% for p in patients %}
+            <a
+              class="patient-item {% if selected_patient and selected_patient.id == p.id %}is-active{% endif %}"
+              href="?thread_patient_id={{ p.id }}"
+            >
+              <div class="patient-meta">
+                <div class="patient-name">{{ p.get_full_name|default:p.username }}</div>
+                <div class="small">ID: <strong>{{ p.id_number|default:p.id }}</strong></div>
+              </div>
+              <span class="patient-status {% if p.unread_count %}status-alert{% endif %}">
+                {% if p.unread_count %}Alert{% else %}Normal{% endif %}
+              </span>
+            </a>
+          {% empty %}
+            <div class="small">No patients available.</div>
+          {% endfor %}
+        </div>
+      </section>
+
+      {% include "components/chat_box.html" with chat_title="Patient Comments" %}
+    </aside>
+
+    <section class="clinician-main">
+      <div class="dash-header">
+        <div>
+          <div class="small">Clinician Dashboard</div>
+          <h1 class="h1" style="margin-top:6px;">
+            {% if selected_patient %}
+              {{ selected_patient.get_full_name|default:selected_patient.username }}
+            {% else %}
+              Select a patient
+            {% endif %}
+          </h1>
+          {% if selected_patient %}
+            <div class="small" style="margin-top:6px;">
+              ID: <strong>{{ selected_patient.id_number|default:selected_patient.id }}</strong>
+            </div>
+            <div class="small" style="margin-top:6px;">
+              Last active:
+              {% if selected_patient.last_login %}
+                {{ selected_patient.last_login|date:"M d, H:i" }}
+              {% else %}
+                --
+              {% endif %}
+            </div>
+          {% endif %}
+        </div>
+
+        <div class="dash-actions">
+          <button id="refreshComparison" class="btn btn-primary" type="button">Refresh report</button>
+        </div>
+      </div>
+
+      <div class="metrics-row">
+        <div class="card metric-card">
+          <div class="small">Peak Pressure Index</div>
+          <div class="metric-value">
+            {% if peak_pressure_index is not None %}
+              {{ peak_pressure_index|floatformat:1 }}
+            {% else %}
+              --
+            {% endif %}
+          </div>
+          <div class="small-muted">Last 7 days</div>
+        </div>
+        <div class="card metric-card">
+          <div class="small">Contact Area %</div>
+          <div class="metric-value">
+            {% if contact_area_pct is not None %}
+              {{ contact_area_pct|floatformat:1 }}%
+            {% else %}
+              --
+            {% endif %}
+          </div>
+          <div class="small-muted">Rolling average</div>
+        </div>
+        <div class="card metric-card">
+          <div class="small">Risk Level</div>
+          <div class="metric-value">
+            {% if risk_level %}{{ risk_level }}{% else %}--{% endif %}
+          </div>
+          <div class="small-muted">Current status</div>
+        </div>
+      </div>
+
+      <section class="card heatmap-section">
+        <div class="card-head">
+          <div>
+            <h2 class="h2">Heat Map History</h2>
+            <p class="p" style="margin-bottom:0;">Historical pressure overview for the selected patient.</p>
+          </div>
+        </div>
+
+        <div class="chart-wrap heatmap-chart">
+          <canvas id="clinicianComparisonChart"></canvas>
+        </div>
+
+        {% if patients %}
+          <div class="form-row" style="margin-top:10px;">
+            <label>Report filters</label>
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+              <select id="comparisonSourceSelect" aria-label="Data source">
+                <option value="both" selected>Live + Uploads</option>
+                <option value="live">Live data</option>
+                <option value="uploads">Uploads</option>
+              </select>
+              <select id="comparisonMetricSelect" aria-label="Metric">
+                <option value="avg" selected>Average</option>
+                <option value="max">Maximum</option>
+              </select>
+              <label class="small" for="comparisonStartDate">From</label>
+              <input type="date" id="comparisonStartDate" />
+              <label class="small" for="comparisonEndDate">To</label>
+              <input type="date" id="comparisonEndDate" />
+              <button id="comparisonApply" class="btn" type="button">Apply</button>
+            </div>
+          </div>
+        {% endif %}
+      </section>
+
+      <section class="card risk-timeline">
+        <div class="card-head" style="margin-bottom:6px;">
+          <h2 class="h2" style="margin:0;">Flagged Risk Periods</h2>
+        </div>
+        <div class="timeline">
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div>
+              <div class="timeline-title">High pressure spike</div>
+              <div class="small">Mar 18 - 10:05 to 10:45</div>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div>
+              <div class="timeline-title">Prolonged sitting</div>
+              <div class="small">Mar 22 - 13:10 to 14:00</div>
+            </div>
+          </div>
+          <div class="timeline-item">
+            <div class="timeline-dot"></div>
+            <div>
+              <div class="timeline-title">Edge pressure alert</div>
+              <div class="small">Apr 02 - 09:20 to 09:50</div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </section>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <script>
+    window.CLINICIAN_COMPARISON_REPORT_URL = "{% url 'clinician_comparison_report_json' %}";
+  </script>
+  <script src="{% static 'js/clinician_comparison_chart.js' %}"></script>
+  <script src="{% static 'js/chat.js' %}"></script>
+{% endblock %}

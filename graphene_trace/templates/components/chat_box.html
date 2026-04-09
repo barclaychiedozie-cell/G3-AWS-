@@ -1,0 +1,95 @@
+<section
+  class="card chat-card{% if chat_layout == 'split' %} chat-card--split{% endif %}"
+  data-chat-root
+  data-api-url="{% if chat_other_user %}{% url 'message_thread_api' user_id=chat_other_user.id %}{% endif %}"
+  data-current-user-id="{{ user.id }}"
+  data-other-user-id="{% if chat_other_user %}{{ chat_other_user.id }}{% endif %}"
+  data-last-message-id="{{ last_chat_message_id|default:0 }}"
+  data-poll-ms="3000"
+>
+  <div class="card-head" style="margin-bottom:6px;">
+    <h2 class="h2" style="margin:0;">
+      {% if chat_title %}{{ chat_title }}{% else %}Messages{% endif %}
+      <span
+        class="notif-badge message-badge {% if unread_messages_total %}is-active{% endif %}"
+        data-message-badge
+        aria-live="polite"
+      >{% if unread_messages_total %}{{ unread_messages_total }}{% endif %}</span>
+    </h2>
+    {% if chat_other_user %}
+      <div class="small">
+        Chat with <strong>{{ chat_other_user.get_full_name|default:chat_other_user.username }}</strong>
+      </div>
+    {% endif %}
+  </div>
+
+  {% if chat_select_mode and patients %}
+    <form method="get" style="margin-top:6px;">
+      <div class="form-row" style="margin:0 0 10px;">
+        <label for="id_thread_user_id">Select patient</label>
+        <select id="id_thread_user_id" name="thread_patient_id" onchange="this.form.submit()" data-chat-select>
+          {% for p in patients %}
+            <option
+              value="{{ p.id }}"
+              data-base-label="{{ p.get_full_name|default:p.username }}"
+              {% if selected_patient and selected_patient.id == p.id %}selected{% endif %}
+            >
+              {{ p.get_full_name|default:p.username }}{% if p.unread_count %} ({{ p.unread_count }}){% endif %}
+            </option>
+          {% endfor %}
+        </select>
+      </div>
+    </form>
+  {% endif %}
+
+  {% if chat_other_user %}
+    <div class="chat-split">
+      <div class="chat-panel">
+        <div class="chat-list" data-chat-list>
+          {% for msg in chat_messages %}
+            <div class="chat-row {% if msg.sender_id == user.id %}chat-row--right{% else %}chat-row--left{% endif %}">
+              <div class="chat-bubble {% if msg.sender_id == user.id %}chat-bubble--me{% else %}chat-bubble--them{% endif %}">
+                <div class="chat-name">{{ msg.sender.get_full_name|default:msg.sender.username }}</div>
+                <div class="chat-text">{{ msg.content }}</div>
+                <div class="chat-time">{{ msg.timestamp|date:"M d, H:i" }}</div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="small chat-empty">No messages yet.</div>
+          {% endfor %}
+        </div>
+      </div>
+
+      <div class="chat-reply">
+        {% if chat_layout == 'split' %}
+          <div class="chat-panel-title">Reply to Patient</div>
+        {% endif %}
+        <form class="chat-input" data-chat-form>
+          {% csrf_token %}
+          <input
+            type="text"
+            name="message"
+            placeholder="Type a message..."
+            aria-label="Message"
+            data-chat-input
+          />
+          <button type="submit" class="chat-send" aria-label="Send message">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                d="M4 12h14m0 0-5-5m5 5-5 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </form>
+        <div class="small chat-status" data-chat-status></div>
+      </div>
+    </div>
+  {% else %}
+    <p class="p" style="margin:0;">No chat partner available.</p>
+  {% endif %}
+</section>
