@@ -1,5 +1,5 @@
 <section
-  class="card chat-card"
+  class="card chat-card{% if chat_layout == 'split' %} chat-card--split{% endif %}"
   data-chat-root
   data-api-url="{% if chat_other_user %}{% url 'message_thread_api' user_id=chat_other_user.id %}{% endif %}"
   data-current-user-id="{{ user.id }}"
@@ -9,7 +9,7 @@
 >
   <div class="card-head" style="margin-bottom:6px;">
     <h2 class="h2" style="margin:0;">
-      Messages
+      {% if chat_title %}{{ chat_title }}{% else %}Messages{% endif %}
       <span
         class="notif-badge message-badge {% if unread_messages_total %}is-active{% endif %}"
         data-message-badge
@@ -43,43 +43,52 @@
   {% endif %}
 
   {% if chat_other_user %}
-    <div class="chat-list" data-chat-list>
-      {% for msg in chat_messages %}
-        <div class="chat-row {% if msg.sender_id == user.id %}chat-row--right{% else %}chat-row--left{% endif %}">
-          <div class="chat-bubble {% if msg.sender_id == user.id %}chat-bubble--me{% else %}chat-bubble--them{% endif %}">
-            <div class="chat-name">{{ msg.sender.get_full_name|default:msg.sender.username }}</div>
-            <div class="chat-text">{{ msg.content }}</div>
-            <div class="chat-time">{{ msg.timestamp|date:"M d, H:i" }}</div>
-          </div>
+    <div class="chat-split">
+      <div class="chat-panel">
+        <div class="chat-list" data-chat-list>
+          {% for msg in chat_messages %}
+            <div class="chat-row {% if msg.sender_id == user.id %}chat-row--right{% else %}chat-row--left{% endif %}">
+              <div class="chat-bubble {% if msg.sender_id == user.id %}chat-bubble--me{% else %}chat-bubble--them{% endif %}">
+                <div class="chat-name">{{ msg.sender.get_full_name|default:msg.sender.username }}</div>
+                <div class="chat-text">{{ msg.content }}</div>
+                <div class="chat-time">{{ msg.timestamp|date:"M d, H:i" }}</div>
+              </div>
+            </div>
+          {% empty %}
+            <div class="small chat-empty">No messages yet.</div>
+          {% endfor %}
         </div>
-      {% empty %}
-        <div class="small chat-empty">No messages yet.</div>
-      {% endfor %}
-    </div>
+      </div>
 
-    <form class="chat-input" data-chat-form>
-      {% csrf_token %}
-      <input
-        type="text"
-        name="message"
-        placeholder="Type a message..."
-        aria-label="Message"
-        data-chat-input
-      />
-      <button type="submit" class="chat-send" aria-label="Send message">
-        <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
-          <path
-            d="M4 12h14m0 0-5-5m5 5-5 5"
-            fill="none"
-            stroke="currentColor"
-            stroke-width="2"
-            stroke-linecap="round"
-            stroke-linejoin="round"
+      <div class="chat-reply">
+        {% if chat_layout == 'split' %}
+          <div class="chat-panel-title">Reply to Patient</div>
+        {% endif %}
+        <form class="chat-input" data-chat-form>
+          {% csrf_token %}
+          <input
+            type="text"
+            name="message"
+            placeholder="Type a message..."
+            aria-label="Message"
+            data-chat-input
           />
-        </svg>
-      </button>
-    </form>
-    <div class="small chat-status" data-chat-status></div>
+          <button type="submit" class="chat-send" aria-label="Send message">
+            <svg viewBox="0 0 24 24" width="16" height="16" aria-hidden="true">
+              <path
+                d="M4 12h14m0 0-5-5m5 5-5 5"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              />
+            </svg>
+          </button>
+        </form>
+        <div class="small chat-status" data-chat-status></div>
+      </div>
+    </div>
   {% else %}
     <p class="p" style="margin:0;">No chat partner available.</p>
   {% endif %}

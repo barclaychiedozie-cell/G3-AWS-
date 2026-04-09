@@ -57,6 +57,43 @@ def _upload_metric(upload, metric):
     return total / count
 
 
+def _upload_stats(upload):
+    total_cells = 0
+    active_cells = 0
+    max_val = None
+
+    with upload.csv_file.open("rb") as fh:
+        wrapper = _open_csv_text(fh)
+        reader = csv.reader(wrapper)
+        for row in reader:
+            if not row:
+                continue
+            for cell in row:
+                raw = (cell or "").strip()
+                if raw == "":
+                    continue
+                try:
+                    value = float(raw)
+                except ValueError:
+                    continue
+                total_cells += 1
+                if value > 0:
+                    active_cells += 1
+                if max_val is None or value > max_val:
+                    max_val = value
+
+    if not total_cells:
+        return {
+            "max_value": 0.0,
+            "contact_area_pct": 0.0,
+        }
+
+    return {
+        "max_value": max_val or 0.0,
+        "contact_area_pct": (active_cells / total_cells) * 100.0,
+    }
+
+
 @login_required
 def dashboard(request):
     if request.user.role != "clinician":
@@ -90,7 +127,26 @@ def dashboard(request):
 
     chat_messages = []
     last_chat_message_id = 0
+    peak_pressure_index = None
+    contact_area_pct = None
+    risk_level = None
     if selected_patient:
+        latest_upload = (
+            PressureUpload.objects.filter(patient=selected_patient)
+            .order_by("-timestamp")
+            .first()
+        )
+        if latest_upload:
+            stats = _upload_stats(latest_upload)
+            peak_pressure_index = stats["max_value"]
+            contact_area_pct = stats["contact_area_pct"]
+            if peak_pressure_index < 50:
+                risk_level = "Low"
+            elif peak_pressure_index < 100:
+                risk_level = "Moderate"
+            else:
+                risk_level = "High"
+
         chat_qs = (
             Message.objects.filter(
                 Q(sender=request.user, receiver=selected_patient)
@@ -113,6 +169,9 @@ def dashboard(request):
             "last_chat_message_id": last_chat_message_id,
             "chat_other_user": selected_patient,
             "unread_messages_total": unread_messages_total,
+            "peak_pressure_index": peak_pressure_index,
+            "contact_area_pct": contact_area_pct,
+            "risk_level": risk_level,
         },
     )
 
