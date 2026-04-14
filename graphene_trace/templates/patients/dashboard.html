@@ -26,14 +26,27 @@
   {% if session_summary %}
   <section class="card" style="margin-bottom:16px;">
     <h2 class="h2">Your Pressure Summary</h2>
-    <p><strong>Pressure Score:</strong> {{ session_summary.pressure_score }}/100 — {{ session_summary.pressure_label }}</p>
+
+    <p>
+      <strong>Pressure Score:</strong>
+      {{ session_summary.pressure_score }}/100 — {{ session_summary.pressure_label }}
+    </p>
+
     <p>{{ session_summary.plain_english }}</p>
 
+    <h3 class="h2" style="font-size: 1.05rem; margin-top: 12px;">Summary of Your Last Session</h3>
     <ul>
       <li><strong>Peak Pressure:</strong> {{ session_summary.peak_pressure_index }}</li>
       <li><strong>Contact Area:</strong> {{ session_summary.contact_area_percent }}%</li>
       <li><strong>Average Active Pressure:</strong> {{ session_summary.average_active_pressure }}</li>
       <li><strong>Last Recorded:</strong> {{ session_summary.timestamp }}</li>
+      <li><strong>Summary Source:</strong>
+        {% if session_summary.source_type == "upload" %}
+          Uploaded session record
+        {% else %}
+          Latest live pressure reading
+        {% endif %}
+      </li>
     </ul>
 
     <p class="small">
@@ -41,6 +54,15 @@
       Low pressure = good distribution,
       Moderate pressure = consider a small movement,
       High pressure = change posture or shift weight soon.
+    </p>
+  </section>
+  {% else %}
+  <section class="card" style="margin-bottom:16px;">
+    <h2 class="h2">Your Pressure Summary</h2>
+    <p>No session summary is available yet.</p>
+    <p class="small">
+      Once pressure data is recorded, you will see your pressure score, last session summary,
+      and a simple explanation here.
     </p>
   </section>
   {% endif %}

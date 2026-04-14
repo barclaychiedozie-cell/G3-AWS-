@@ -46,6 +46,45 @@ def _read_upload_matrix(upload):
     return matrix
 
 
+def _read_latest_pressuredata_matrix(patient):
+    latest_ts = (
+        PressureData.objects.filter(patient=patient)
+        .order_by("-timestamp")
+        .values_list("timestamp", flat=True)
+        .first()
+    )
+
+    if not latest_ts:
+        return None, None
+
+    rows = PressureData.objects.filter(patient=patient, timestamp=latest_ts)
+
+    cells = []
+    max_r = 0
+    max_c = 0
+
+    for row in rows:
+        m = SENSOR_RE.match((row.sensor_location or "").strip())
+        if not m:
+            continue
+        r = int(m.group(1))
+        c = int(m.group(2))
+        value = float(row.pressure_value or 0)
+
+        cells.append((r, c, value))
+        max_r = max(max_r, r)
+        max_c = max(max_c, c)
+
+    if not cells or max_r == 0 or max_c == 0:
+        return None, latest_ts
+
+    matrix = [[0.0 for _ in range(max_c)] for _ in range(max_r)]
+    for r, c, value in cells:
+        matrix[r - 1][c - 1] = value
+
+    return matrix, latest_ts
+
+
 def _flatten(matrix):
     return [value for row in matrix for value in row]
 
@@ -97,23 +136,44 @@ def _build_patient_friendly_explanation(score):
     return "Your pressure looks well spread out. Keep changing position regularly to stay comfortable."
 
 
-def _build_session_summary(upload):
-    matrix = _read_upload_matrix(upload)
+def _build_summary_from_matrix(matrix, source_timestamp, source_type, upload_id=None):
     score = _pressure_score(matrix)
     peak = _largest_active_peak(matrix)
     contact_area = _contact_area_percent(matrix)
     avg_active = _avg_active_pressure(matrix)
 
     return {
-        "upload_id": upload.id,
-        "timestamp": upload.timestamp.isoformat(),
+        "upload_id": upload_id,
+        "timestamp": source_timestamp.isoformat() if source_timestamp else None,
         "pressure_score": score,
         "pressure_label": _pressure_label(score),
         "peak_pressure_index": peak,
         "contact_area_percent": contact_area,
         "average_active_pressure": avg_active,
         "plain_english": _build_patient_friendly_explanation(score),
+        "source_type": source_type,
     }
+
+
+def _build_session_summary_from_upload(upload):
+    matrix = _read_upload_matrix(upload)
+    return _build_summary_from_matrix(
+        matrix=matrix,
+        source_timestamp=upload.timestamp,
+        source_type="upload",
+        upload_id=upload.id,
+    )
+
+
+def _build_session_summary_from_pressuredata(patient):
+    matrix, latest_ts = _read_latest_pressuredata_matrix(patient)
+    if matrix is None:
+        return None
+    return _build_summary_from_matrix(
+        matrix=matrix,
+        source_timestamp=latest_ts,
+        source_type="live_data",
+    )
 
 
 @login_required
@@ -132,7 +192,10 @@ def dashboard(request):
         .first()
     )
 
-    session_summary = _build_session_summary(latest_upload) if latest_upload else None
+    if latest_upload:
+        session_summary = _build_session_summary_from_upload(latest_upload)
+    else:
+        session_summary = _build_session_summary_from_pressuredata(request.user)
 
     return render(
         request,
