@@ -1,0 +1,37 @@
+{% extends "admin/base_site.html" %}
+{% load admin_urls %}
+
+{% block content %}
+<div class="module">
+  <h1>{{ title }}</h1>
+
+  <form method="post">
+    {% csrf_token %}
+    <input type="hidden" name="action" value="{{ action }}" />
+
+    <div class="form-row">
+      <label for="clinician_id">Select Clinician:</label>
+      <select name="clinician_id" id="clinician_id" required>
+        <option value="">Choose a clinician...</option>
+        {% for clinician in clinicians %}
+          <option value="{{ clinician.id }}">{{ clinician.username }} ({{ clinician.first_name }} {{ clinician.last_name }})</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <div class="form-row">
+      <h3>Patients to assign:</h3>
+      <ul>
+        {% for patient in patients %}
+          <li>{{ patient.username }} ({{ patient.first_name }} {{ patient.last_name }})</li>
+        {% endfor %}
+      </ul>
+    </div>
+
+    <div class="submit-row">
+      <input type="submit" value="Assign Patients" class="default" />
+      <a href="{% url 'admin:patients_clinicianpatientaccess_changelist' %}" class="cancel-link">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

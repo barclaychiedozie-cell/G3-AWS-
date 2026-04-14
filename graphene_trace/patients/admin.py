@@ -8,7 +8,14 @@ from django.utils import timezone
 from django.utils.dateparse import parse_datetime
 
 from users.models import User
-from .models import Comment, Notification, PressureData, PressureUpload
+from .models import (
+    Comment,
+    Notification,
+    PressureData,
+    PressureUpload,
+    HighPressureFlag,
+    ClinicianPatientAccess,
+)
 
 
 class UploadPressureMatrixCSVForm(forms.Form):
@@ -55,7 +62,6 @@ class PressureUploadAdmin(admin.ModelAdmin):
                 ts_raw = (form.cleaned_data.get("timestamp") or "").strip()
                 f = form.cleaned_data["csv_file"]
 
-                # patient lookup
                 try:
                     patient = User.objects.get(username=patient_username)
                 except User.DoesNotExist:
@@ -69,7 +75,6 @@ class PressureUploadAdmin(admin.ModelAdmin):
                     )
                     return redirect("..")
 
-                # timestamp
                 if ts_raw:
                     ts = parse_datetime(ts_raw) or parse_datetime(ts_raw.replace(" ", "T"))
                     if ts is None:
@@ -80,10 +85,8 @@ class PressureUploadAdmin(admin.ModelAdmin):
                 else:
                     ts = timezone.now()
 
-                # IMPORTANT: compute dims without wrapping/closing f.file (fixes Windows temp-file FileNotFoundError)
                 rows, cols, encoding = self._count_matrix_dims_safe(f)
 
-                # Rewind so FileField can save correctly
                 try:
                     f.seek(0)
                 except Exception:
@@ -110,13 +113,8 @@ class PressureUploadAdmin(admin.ModelAdmin):
         return render(request, "admin/upload_pressure_matrix_csv.html", {"form": form})
 
     def _count_matrix_dims_safe(self, uploaded_file):
-        """
-        Safely compute rows/cols without touching uploaded_file.file / TextIOWrapper,
-        which can close the underlying Windows temp file and break FileField save().
-        """
         raw = b"".join(uploaded_file.chunks())
 
-        # Try utf-8-sig first, then fallback to cp1252
         try:
             text = raw.decode("utf-8-sig", errors="replace")
             encoding = "utf-8-sig"
@@ -159,6 +157,146 @@ class CommentAdmin(admin.ModelAdmin):
 
 @admin.register(Notification)
 class NotificationAdmin(admin.ModelAdmin):
-    list_display = ("timestamp", "patient", "is_read", "message")
-    list_filter = ("is_read", "patient")
+    list_display = ("timestamp", "patient", "alert_level", "is_read", "message")
+    list_filter = ("alert_level", "is_read", "patient")
     search_fields = ("patient__username", "message")
+
+
+@admin.register(HighPressureFlag)
+class HighPressureFlagAdmin(admin.ModelAdmin):
+    list_display = ("patient", "start_time", "end_time", "max_pressure", "note")
+    list_filter = ("patient",)
+    search_fields = ("patient__username", "note")
+    ordering = ("-start_time",)
+
+
+@admin.register(ClinicianPatientAccess)
+class ClinicianPatientAccessAdmin(admin.ModelAdmin):
+    list_display = ("clinician", "patient", "created_at")
+    list_filter = ("clinician", "patient")
+    search_fields = ("clinician__username", "patient__username")
+    ordering = ("-created_at",)
+
+    # Add bulk actions for easier management
+    actions = ['bulk_assign_patients', 'bulk_remove_assignments']
+
+    def get_urls(self):
+        urls = super().get_urls()
+        custom_urls = [
+            path('manage-access/', self.admin_site.admin_view(self.manage_access), name='manage_clinician_access'),
+        ]
+        return custom_urls + urls
+
+    def changelist_view(self, request, extra_context=None):
+        """Add summary statistics to the changelist"""
+        extra_context = extra_context or {}
+        extra_context['manage_access_url'] = 'admin:manage_clinician_access'
+
+        # Add summary statistics
+        from django.db.models import Count
+        clinician_stats = User.objects.filter(role='clinician').annotate(
+            patient_count=Count('assigned_patients')
+        ).order_by('-patient_count')[:10]  # Top 10 clinicians by patient count
+
+        patient_count = User.objects.filter(role='patient').count()
+        clinician_count = User.objects.filter(role='clinician').count()
+        total_assignments = ClinicianPatientAccess.objects.count()
+
+        extra_context.update({
+            'clinician_stats': clinician_stats,
+            'patient_count': patient_count,
+            'clinician_count': clinician_count,
+            'total_assignments': total_assignments,
+        })
+
+        return super().changelist_view(request, extra_context)
+
+    def manage_access(self, request):
+        """Custom view for managing clinician-patient access"""
+        # Only allow admins to access this view
+        if not request.user.is_superuser:
+            messages.error(request, "You don't have permission to manage clinician access.")
+            return redirect('admin:index')
+
+        clinicians = User.objects.filter(role='clinician').prefetch_related('assigned_patients')
+        patients = User.objects.filter(role='patient')
+
+        if request.method == 'POST':
+            clinician_id = request.POST.get('clinician_id')
+            patient_ids = request.POST.getlist('patient_ids')
+
+            if clinician_id and patient_ids:
+                try:
+                    clinician = User.objects.get(id=clinician_id, role='clinician')
+
+                    # Remove existing assignments not in the selected list
+                    ClinicianPatientAccess.objects.filter(
+                        clinician=clinician
+                    ).exclude(patient_id__in=patient_ids).delete()
+
+                    # Add new assignments
+                    for patient_id in patient_ids:
+                        ClinicianPatientAccess.objects.get_or_create(
+                            clinician=clinician,
+                            patient_id=patient_id,
+                            defaults={'created_at': timezone.now()}
+                        )
+
+                    messages.success(request, f"Updated patient assignments for {clinician.username}")
+                    return redirect('admin:manage_clinician_access')
+                except User.DoesNotExist:
+                    messages.error(request, "Invalid clinician selected")
+
+        context = {
+            'title': 'Manage Clinician-Patient Access',
+            'clinicians': clinicians,
+            'patients': patients,
+            'opts': self.model._meta,
+        }
+        return render(request, 'admin/manage_clinician_access.html', context)
+
+    def bulk_assign_patients(self, request, queryset):
+        """Bulk assign selected patients to a clinician"""
+        if queryset.count() == 0:
+            self.message_user(request, "No patients selected.", level=messages.WARNING)
+            return
+
+        # Get all clinicians for selection
+        clinicians = User.objects.filter(role='clinician')
+        if not clinicians.exists():
+            self.message_user(request, "No clinicians available.", level=messages.ERROR)
+            return
+
+        if 'clinician_id' in request.POST:
+            clinician_id = request.POST.get('clinician_id')
+            try:
+                clinician = User.objects.get(id=clinician_id, role='clinician')
+                assigned_count = 0
+                for access in queryset:
+                    # Create assignment if it doesn't exist
+                    ClinicianPatientAccess.objects.get_or_create(
+                        clinician=clinician,
+                        patient=access.patient,
+                        defaults={'created_at': timezone.now()}
+                    )
+                    assigned_count += 1
+                self.message_user(request, f"Assigned {assigned_count} patients to {clinician.username}.")
+            except User.DoesNotExist:
+                self.message_user(request, "Invalid clinician selected.", level=messages.ERROR)
+        else:
+            # Show form to select clinician
+            return render(request, 'admin/bulk_assign_patients.html', {
+                'title': 'Bulk Assign Patients to Clinician',
+                'patients': [access.patient for access in queryset],
+                'clinicians': clinicians,
+                'action': 'bulk_assign_patients',
+            })
+
+    bulk_assign_patients.short_description = "Assign selected patients to a clinician"
+
+    def bulk_remove_assignments(self, request, queryset):
+        """Bulk remove selected assignments"""
+        deleted_count = queryset.delete()[0]
+        self.message_user(request, f"Removed {deleted_count} clinician-patient assignments.")
+
+    bulk_remove_assignments.short_description = "Remove selected assignments"

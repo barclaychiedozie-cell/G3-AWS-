@@ -1,0 +1,30 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Flagged High-Pressure Periods for {{ patient.username }}</h1>
+
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th>Start Time</th>
+      <th>End Time</th>
+      <th>Max Pressure</th>
+      <th>Note</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for flag in flags %}
+    <tr>
+      <td>{{ flag.start_time }}</td>
+      <td>{{ flag.end_time }}</td>
+      <td>{{ flag.max_pressure }}</td>
+      <td>{{ flag.note|default:"-" }}</td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="4">No flagged periods found.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

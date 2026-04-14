@@ -7,23 +7,113 @@ from django.contrib.auth.decorators import login_required
 from django.http import JsonResponse
 from django.shortcuts import redirect, render
 from django.utils import timezone
-from django.utils.dateparse import parse_date, parse_datetime
+from django.utils.dateparse import parse_date
 
 from .forms import CommentForm
 from .models import Comment, Notification, PressureData, PressureUpload
 
 
 SENSOR_RE = re.compile(r"r(\d+)_c(\d+)$")
+ACTIVE_THRESHOLD = 10.0
 
 
 def _open_csv_text(fh):
-    """
-    Robust CSV decoding for Excel/Windows exports.
-    """
     try:
         return TextIOWrapper(fh, encoding="utf-8-sig", errors="replace", newline="")
     except Exception:
         return TextIOWrapper(fh, encoding="cp1252", errors="replace", newline="")
+
+
+def _read_upload_matrix(upload):
+    matrix = []
+    with upload.csv_file.open("rb") as fh:
+        wrapper = _open_csv_text(fh)
+        reader = csv.reader(wrapper)
+        for row in reader:
+            if not row:
+                continue
+            clean_row = []
+            for cell in row:
+                raw = (cell or "").strip()
+                if raw == "":
+                    clean_row.append(0.0)
+                else:
+                    try:
+                        clean_row.append(float(raw))
+                    except ValueError:
+                        clean_row.append(0.0)
+            matrix.append(clean_row)
+    return matrix
+
+
+def _flatten(matrix):
+    return [value for row in matrix for value in row]
+
+
+def _contact_area_percent(matrix):
+    values = _flatten(matrix)
+    if not values:
+        return 0.0
+    active = sum(1 for value in values if value >= ACTIVE_THRESHOLD)
+    return round((active / len(values)) * 100.0, 2)
+
+
+def _avg_active_pressure(matrix):
+    active_values = [value for value in _flatten(matrix) if value >= ACTIVE_THRESHOLD]
+    if not active_values:
+        return 0.0
+    return round(sum(active_values) / len(active_values), 2)
+
+
+def _largest_active_peak(matrix):
+    values = _flatten(matrix)
+    if not values:
+        return 0.0
+    active_values = [v for v in values if v >= ACTIVE_THRESHOLD]
+    return round(max(active_values), 2) if active_values else 0.0
+
+
+def _pressure_score(matrix):
+    peak = _largest_active_peak(matrix)
+    if peak <= 0:
+        return 0
+    score = round((peak / 4095.0) * 100)
+    return max(0, min(100, score))
+
+
+def _pressure_label(score):
+    if score >= 75:
+        return "High pressure"
+    if score >= 45:
+        return "Moderate pressure"
+    return "Low pressure"
+
+
+def _build_patient_friendly_explanation(score):
+    if score >= 75:
+        return "Your seat pressure looks high. Try a small posture change or shift your weight to reduce pressure."
+    if score >= 45:
+        return "Your pressure is moderate. A small movement or position change may help spread pressure more evenly."
+    return "Your pressure looks well spread out. Keep changing position regularly to stay comfortable."
+
+
+def _build_session_summary(upload):
+    matrix = _read_upload_matrix(upload)
+    score = _pressure_score(matrix)
+    peak = _largest_active_peak(matrix)
+    contact_area = _contact_area_percent(matrix)
+    avg_active = _avg_active_pressure(matrix)
+
+    return {
+        "upload_id": upload.id,
+        "timestamp": upload.timestamp.isoformat(),
+        "pressure_score": score,
+        "pressure_label": _pressure_label(score),
+        "peak_pressure_index": peak,
+        "contact_area_percent": contact_area,
+        "average_active_pressure": avg_active,
+        "plain_english": _build_patient_friendly_explanation(score),
+    }
 
 
 @login_required
@@ -36,15 +126,26 @@ def dashboard(request):
         .order_by("-timestamp")[:10]
     )
 
-    return render(request, "patients/dashboard.html", {"notifications": notifications})
+    latest_upload = (
+        PressureUpload.objects.filter(patient=request.user)
+        .order_by("-timestamp")
+        .first()
+    )
+
+    session_summary = _build_session_summary(latest_upload) if latest_upload else None
+
+    return render(
+        request,
+        "patients/dashboard.html",
+        {
+            "notifications": notifications,
+            "session_summary": session_summary,
+        },
+    )
 
 
 @login_required
 def live_grid_json(request):
-    """
-    Returns latest heatmap grid snapshot from DB PressureData:
-      { cells: [{r,c,value}, ...], timestamp: <iso> }
-    """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
@@ -77,11 +178,6 @@ def live_grid_json(request):
 
 @login_required
 def live_heatmap_chart_json(request):
-    """
-    Real-time chart data derived from recent DB grid snapshots.
-    Returns max & avg per timestamp within last 15 minutes:
-      { data: [{timestamp, max, avg}, ...] }
-    """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
@@ -95,8 +191,7 @@ def live_heatmap_chart_json(request):
 
     buckets = {}
     for row in qs:
-        ts = row["timestamp"]
-        ts_key = ts.isoformat()
+        ts_key = row["timestamp"].isoformat()
         val = float(row["pressure_value"] or 0)
 
         b = buckets.get(ts_key)
@@ -147,10 +242,6 @@ def comments(request):
 
 @login_required
 def pressure_history_json(request):
-    """
-    Historical pressure readings from DB PressureData.
-    (This is separate from daily CSV "past records".)
-    """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
@@ -180,16 +271,8 @@ def pressure_history_json(request):
     return JsonResponse({"data": data})
 
 
-# -------------------------
-# Past Records (Daily CSV files) stored as PressureUpload.csv_file
-# -------------------------
-
 @login_required
 def past_days_json(request):
-    """
-    List available days that have a PressureUpload CSV.
-    Returns: { data: [{day, upload_id, timestamp, uploaded_at, rows, cols}, ...] }
-    """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
@@ -198,7 +281,6 @@ def past_days_json(request):
 
     uploads = PressureUpload.objects.filter(patient=request.user).order_by("-timestamp")
 
-    # day_str -> latest upload for that day
     day_map = {}
     for u in uploads:
         day_str = timezone.localtime(u.timestamp).date().isoformat()
@@ -223,20 +305,6 @@ def past_days_json(request):
 
 @login_required
 def past_day_grid_json(request):
-    """
-    Return the matrix for a selected day by reading PressureUpload.csv_file.
-
-    Query params:
-      - day (required): YYYY-MM-DD
-      - max_rows (optional, default 60)
-      - max_cols (optional, default 60)
-
-    Returns:
-      {
-        day, upload_id, timestamp, rows, cols, matrix, downsampled,
-        source_rows, source_cols, row_step, col_step
-      }
-    """
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
@@ -269,29 +337,9 @@ def past_day_grid_json(request):
     if not upload:
         return JsonResponse({"error": "not found"}, status=404)
 
-    full_matrix = []
-    max_cols_seen = 0
-    with upload.csv_file.open("rb") as fh:
-        wrapper = _open_csv_text(fh)
-        reader = csv.reader(wrapper)
-        for row in reader:
-            if not row:
-                continue
-            out_row = []
-            for cell in row:
-                raw = (cell or "").strip()
-                if raw == "":
-                    out_row.append(0.0)
-                else:
-                    try:
-                        out_row.append(float(raw))
-                    except ValueError:
-                        out_row.append(0.0)
-            max_cols_seen = max(max_cols_seen, len(out_row))
-            full_matrix.append(out_row)
-
+    full_matrix = _read_upload_matrix(upload)
     source_rows = len(full_matrix)
-    source_cols = max_cols_seen
+    source_cols = max((len(r) for r in full_matrix), default=0)
 
     if source_rows == 0 or source_cols == 0:
         return JsonResponse({

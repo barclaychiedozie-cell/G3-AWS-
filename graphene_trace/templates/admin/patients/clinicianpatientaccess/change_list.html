@@ -1,0 +1,57 @@
+{% extends "admin/change_list.html" %}
+{% load i18n %}
+
+{% block object-tools-items %}
+  <li>
+    <a href="{% url 'admin:manage_clinician_access' %}" class="addlink">
+      Manage Clinician Access
+    </a>
+  </li>
+  {{ block.super }}
+{% endblock %}
+
+{% block content %}
+  {{ block.super }}
+
+  {% if clinician_stats %}
+    <div class="module" style="margin-top: 20px;">
+      <h2>Access Summary</h2>
+      <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 15px;">
+        <div style="background: #f8f8f8; padding: 10px; border-radius: 4px; text-align: center;">
+          <strong>{{ clinician_count }}</strong><br>
+          <small>Total Clinicians</small>
+        </div>
+        <div style="background: #f8f8f8; padding: 10px; border-radius: 4px; text-align: center;">
+          <strong>{{ patient_count }}</strong><br>
+          <small>Total Patients</small>
+        </div>
+        <div style="background: #f8f8f8; padding: 10px; border-radius: 4px; text-align: center;">
+          <strong>{{ total_assignments }}</strong><br>
+          <small>Total Assignments</small>
+        </div>
+      </div>
+
+      <h3>Clinicians by Patient Count</h3>
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="background: #f8f8f8;">
+            <th style="padding: 8px; text-align: left; border: 1px solid #ddd;">Clinician</th>
+            <th style="padding: 8px; text-align: center; border: 1px solid #ddd;">Patients Assigned</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for stat in clinician_stats %}
+            <tr>
+              <td style="padding: 8px; border: 1px solid #ddd;">
+                {{ stat.first_name }} {{ stat.last_name }} ({{ stat.username }})
+              </td>
+              <td style="padding: 8px; text-align: center; border: 1px solid #ddd;">
+                {{ stat.patient_count }}
+              </td>
+            </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    </div>
+  {% endif %}
+{% endblock %}

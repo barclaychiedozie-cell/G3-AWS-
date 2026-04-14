@@ -1,0 +1,89 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Pressure History for {{ patient.username }}</h1>
+
+<p>
+  This graph shows how the patient’s pressure changes over time.
+  Higher values mean higher pressure on the seat, which may indicate increased risk if pressure stays high for too long.
+</p>
+
+{% if values %}
+  <p><strong>Total readings:</strong> {{ values|length }}</p>
+
+  <div style="max-width: 1000px; margin-bottom: 16px;">
+    <canvas id="pressureChart"></canvas>
+  </div>
+
+  <div style="margin-bottom: 16px;">
+    <p><strong>How to read this graph:</strong></p>
+    <ul>
+      <li>Lower values usually mean lower pressure.</li>
+      <li>Higher peaks may show risk areas that need attention.</li>
+      <li>A repeated pattern of high values can suggest pressure is building up over time.</li>
+    </ul>
+  </div>
+
+  {{ labels|json_script:"graph-labels" }}
+  {{ values|json_script:"graph-values" }}
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+  <script>
+    const labels = JSON.parse(document.getElementById("graph-labels").textContent);
+    const values = JSON.parse(document.getElementById("graph-values").textContent);
+
+    const canvas = document.getElementById("pressureChart");
+    const ctx = canvas.getContext("2d");
+
+    new Chart(ctx, {
+      type: "line",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Pressure Value",
+          data: values,
+          borderColor: "blue",
+          backgroundColor: "rgba(0, 0, 255, 0.1)",
+          borderWidth: 2,
+          tension: 0.2,
+          fill: false
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: true,
+        plugins: {
+          legend: {
+            display: true
+          },
+          tooltip: {
+            enabled: true
+          }
+        },
+        scales: {
+          y: {
+            beginAtZero: true,
+            title: {
+              display: true,
+              text: "Pressure"
+            }
+          },
+          x: {
+            title: {
+              display: true,
+              text: "Time"
+            }
+          }
+        }
+      }
+    });
+  </script>
+{% else %}
+  <p>No pressure history data found for this patient.</p>
+  <p>
+    Add pressure data for this patient to see a graph and identify pressure patterns.
+  </p>
+{% endif %}
+
+<p><a href="{% url 'clinician_dashboard' %}">Back to Dashboard</a></p>
+{% endblock %}

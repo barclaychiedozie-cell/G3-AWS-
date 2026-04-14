@@ -2,137 +2,322 @@
 {% load static %}
 
 {% block content %}
-<link rel="stylesheet" href="{% static 'css/dashboard.css' %}">
+  <div class="dash-header">
+    <div>
+      <div class="small">Patient Dashboard</div>
+      <h1 class="h1" style="margin-top:6px;">
+        Welcome, {{ user.first_name|default:user.username }}
+      </h1>
 
-<div class="dash-header">
-  <div>
-    <div class="small">Patient Dashboard</div>
-    <h1 class="h1" style="margin-top:6px;">
-      Welcome, {{ user.first_name|default:user.username }}
-    </h1>
-    {% if user.id_number %}
-      <div class="small" style="margin-top:6px;">ID: <strong>{{ user.id_number }}</strong></div>
-    {% endif %}
-    <div class="small" style="margin-top:6px;">
-      Last update: <span id="last-update">—</span>
-    </div>
-  </div>
-  <div class="dash-actions">
-    <a class="btn" href="{% url 'comments' %}">Comments</a>
-  </div>
-</div>
-
-<div class="dash-grid">
-  <!-- LEFT: Heatmap + Trend Chart -->
-  <section class="card">
-    <div class="card-head">
-      <div>
-        <h2 class="h2" id="heatmapTitle">Live Pressure Heatmap</h2>
-        <p class="p" style="margin-bottom:0;" id="heatmapSubtitle">
-          Red = higher pressure. Updates automatically.
-        </p>
-      </div>
-      <div class="legend">
-        <span class="small">Low</span>
-        <span class="legend-bar" aria-hidden="true"></span>
-        <span class="small">High</span>
-      </div>
-    </div>
-    <div class="heatmap-wrap">
-      <div id="heatmapContainer" class="heatmap"></div>
-    </div>
-    <div id="reposition-suggestion" class="notice" style="display:none;"></div>
-    <div class="btn-row" style="margin-top:10px;">
-      <button type="button" class="btn" id="backToLiveTop" style="display:none;">
-        Back to Live
-      </button>
-    </div>
-    <div style="margin-top:14px;">
-      <h2 class="h2" style="margin-bottom:8px;" id="trendTitle">Heatmap Trend (Real Time)</h2>
-      <p class="p" style="margin-top:-6px;" id="trendSubtitle">
-        Max and average pressure derived from the heatmap grid.
-      </p>
-      <div class="chart-wrap">
-        <canvas id="heatmapTrendChart"></canvas>
-      </div>
-    </div>
-  </section>
-
-  <!-- RIGHT: Notifications + Past Records + Tips -->
-  <aside class="stack">
-    <section class="card">
-      <div class="card-head" style="margin-bottom:6px;">
-        <h2 class="h2" style="margin:0;">Notifications</h2>
-      </div>
-      {% if notifications %}
-        <div class="notif-list">
-          {% for n in notifications %}
-            <div class="notif">
-              <div class="notif-msg">{{ n.message }}</div>
-              <div class="small">{{ n.timestamp }}</div>
-            </div>
-          {% endfor %}
-        </div>
-      {% else %}
-        <p class="p" style="margin:0;">No notifications right now.</p>
+      {% if user.id_number %}
+        <div class="small" style="margin-top:6px;">ID: <strong>{{ user.id_number }}</strong></div>
       {% endif %}
-    </section>
 
-    <section class="card">
-      <div class="card-head" style="margin-bottom:6px;">
-        <h2 class="h2" style="margin:0;">Past Records (Daily)</h2>
+      <div class="small" style="margin-top:6px;">
+        Last update: <span id="last-update">—</span>
       </div>
-      <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
-        <label class="small" for="pastDaysLimit">Show:</label>
-        <select id="pastDaysLimit">
-          <option value="7">Last 7 days</option>
-          <option value="30" selected>Last 30 days</option>
-          <option value="90">Last 90 days</option>
-          <option value="365">Last 1 year</option>
-        </select>
-        <button type="button" class="btn" id="loadPastDays">Load</button>
-        <button type="button" class="btn" id="backToLive" style="display:none;">
+    </div>
+
+    <div class="dash-actions">
+      <a class="btn" href="{% url 'comments' %}">Comments</a>
+    </div>
+  </div>
+
+  {% if session_summary %}
+  <section class="card" style="margin-bottom:16px;">
+    <h2 class="h2">Your Pressure Summary</h2>
+    <p><strong>Pressure Score:</strong> {{ session_summary.pressure_score }}/100 — {{ session_summary.pressure_label }}</p>
+    <p>{{ session_summary.plain_english }}</p>
+
+    <ul>
+      <li><strong>Peak Pressure:</strong> {{ session_summary.peak_pressure_index }}</li>
+      <li><strong>Contact Area:</strong> {{ session_summary.contact_area_percent }}%</li>
+      <li><strong>Average Active Pressure:</strong> {{ session_summary.average_active_pressure }}</li>
+      <li><strong>Last Recorded:</strong> {{ session_summary.timestamp }}</li>
+    </ul>
+
+    <p class="small">
+      Easy guide:
+      Low pressure = good distribution,
+      Moderate pressure = consider a small movement,
+      High pressure = change posture or shift weight soon.
+    </p>
+  </section>
+  {% endif %}
+
+  <div class="dash-grid">
+    <section class="card">
+      <div class="card-head">
+        <div>
+          <h2 class="h2" id="heatmapTitle">Live Pressure Heatmap</h2>
+          <p class="p" style="margin-bottom:0;" id="heatmapSubtitle">
+            This map shows where more pressure is building on your seat. Red means higher pressure.
+          </p>
+        </div>
+
+        <div class="legend">
+          <span class="small">Low</span>
+          <span class="legend-bar" aria-hidden="true"></span>
+          <span class="small">High</span>
+        </div>
+      </div>
+
+      <p class="small" style="margin-bottom:10px;">
+        Colour guide: blue/green means lower pressure, yellow/orange means medium pressure, red means higher pressure.
+      </p>
+
+      <style>
+        .heatmap-wrap { height: 360px; }
+        #heatmapContainer.heatmap { width: 100%; height: 100%; }
+      </style>
+
+      <div class="heatmap-wrap">
+        <div id="heatmapContainer" class="heatmap"></div>
+      </div>
+
+      <div id="reposition-suggestion" class="notice" style="display:none;"></div>
+
+      <div class="btn-row" style="margin-top:10px;">
+        <button type="button" class="btn" id="backToLiveTop" style="display:none;">
           Back to Live
         </button>
       </div>
-      <p class="small" id="pastDaysStatus" style="margin-top:8px;"></p>
-      <div style="margin-top:6px;">
-        <select id="pastDaySelect" style="width:100%;"></select>
-      </div>
-      <div class="btn-row" style="margin-top:10px;">
-        <button type="button" class="btn btn-primary" id="viewPastDay">View selected day</button>
+
+      <div style="margin-top:14px;">
+        <h2 class="h2" style="margin-bottom:8px;" id="trendTitle">Heatmap Trend</h2>
+        <p class="p" style="margin-top:-6px;" id="trendSubtitle">
+          This chart shows how your seat pressure changes over time.
+        </p>
+
+        <div class="chart-wrap">
+          <canvas id="heatmapTrendChart"></canvas>
+        </div>
       </div>
     </section>
 
-    <section class="card">
-      <h2 class="h2">Quick Tips</h2>
-      <ul class="list">
-        <li>Shift weight every few minutes.</li>
-        <li>If pressure is high, try a small posture change.</li>
-        <li>Leave a comment tied to a data point if you feel discomfort.</li>
-      </ul>
-    </section>
-    <section class="card">
-      <h2 class="h2">Shortcuts</h2>
-      <div class="btn-row">
-        <a class="btn btn-primary" href="{% url 'comments' %}">Add a comment</a>
-      </div>
-    </section>
-  </aside>
-</div>
+    <aside class="stack">
+      <section class="card">
+        <div class="card-head" style="margin-bottom:6px;">
+          <h2 class="h2" style="margin:0;">Notifications</h2>
+        </div>
 
-<!-- Vendor/3rd party scripts -->
-<script src="{% static 'vendor/heatmapjs/heatmap.min.js' %}"></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
-<!-- API endpoint variables -->
-<script>
-  window.LIVE_GRID_URL = "{% url 'live_grid_json' %}";
-  window.LIVE_HEATMAP_CHART_URL = "{% url 'live_heatmap_chart_json' %}";
-  window.PAST_DAYS_URL = "{% url 'past_days_json' %}";
-  window.PAST_DAY_GRID_URL = "{% url 'past_day_grid_json' %}";
-</script>
-<!-- Modular app scripts -->
-<script src="{% static 'js/pressure_map.js' %}"></script>
-<script src="{% static 'js/heatmap_trend_chart.js' %}"></script>
-<script src="{% static 'js/dashboard.js' %}"></script>
+        <p class="small">
+          Notifications tell you when something may need attention, such as higher pressure or posture changes.
+        </p>
+
+        {% if notifications %}
+          <div class="notif-list">
+            {% for n in notifications %}
+              <div class="notif">
+                <div class="notif-msg">{{ n.message }}</div>
+                <div class="small">{{ n.timestamp }}</div>
+              </div>
+            {% endfor %}
+          </div>
+        {% else %}
+          <p class="p" style="margin:0;">No notifications right now.</p>
+        {% endif %}
+      </section>
+
+      <section class="card">
+        <div class="card-head" style="margin-bottom:6px;">
+          <h2 class="h2" style="margin:0;">Past Records (Daily)</h2>
+        </div>
+
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <label class="small" for="pastDaysLimit">Show:</label>
+          <select id="pastDaysLimit">
+            <option value="7">Last 7 days</option>
+            <option value="30" selected>Last 30 days</option>
+            <option value="90">Last 90 days</option>
+            <option value="365">Last 1 year</option>
+          </select>
+
+          <button type="button" class="btn" id="loadPastDays">Load</button>
+
+          <button type="button" class="btn" id="backToLive" style="display:none;">
+            Back to Live
+          </button>
+        </div>
+
+        <p class="small" id="pastDaysStatus" style="margin-top:8px;"></p>
+
+        <div style="margin-top:6px;">
+          <select id="pastDaySelect" style="width:100%;"></select>
+        </div>
+
+        <div class="btn-row" style="margin-top:10px;">
+          <button type="button" class="btn btn-primary" id="viewPastDay">View selected day</button>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2 class="h2">Quick Tips</h2>
+        <ul class="list">
+          <li>Shift your weight every few minutes.</li>
+          <li>If pressure looks high, try a small posture change.</li>
+          <li>Use comments to note any discomfort.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="h2">What the numbers mean</h2>
+        <ul class="list">
+          <li><strong>Pressure Score:</strong> a simple score showing how much pressure is building up.</li>
+          <li><strong>Peak Pressure:</strong> the highest pressure found in one area.</li>
+          <li><strong>Contact Area:</strong> how much of the seat is in contact with your body.</li>
+          <li><strong>Average Active Pressure:</strong> the average pressure where your body is pressing on the seat.</li>
+        </ul>
+      </section>
+
+      <section class="card">
+        <h2 class="h2">Shortcuts</h2>
+        <div class="btn-row">
+          <a class="btn btn-primary" href="{% url 'comments' %}">Add a comment</a>
+        </div>
+      </section>
+    </aside>
+  </div>
+
+  <script src="{% static 'vendor/heatmapjs/heatmap.min.js' %}"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.3.0/dist/chart.umd.min.js"></script>
+
+  <script>
+    window.LIVE_GRID_URL = "{% url 'live_grid_json' %}";
+    window.LIVE_HEATMAP_CHART_URL = "{% url 'live_heatmap_chart_json' %}";
+    window.PAST_DAYS_URL = "{% url 'past_days_json' %}";
+    window.PAST_DAY_GRID_URL = "{% url 'past_day_grid_json' %}";
+  </script>
+
+  <script src="{% static 'js/pressure_map.js' %}"></script>
+  <script src="{% static 'js/heatmap_trend_chart.js' %}"></script>
+
+  <script>
+    async function loadPastDays() {
+      const limit = document.getElementById("pastDaysLimit").value;
+      const status = document.getElementById("pastDaysStatus");
+      const sel = document.getElementById("pastDaySelect");
+
+      status.textContent = "Loading...";
+      sel.innerHTML = "";
+
+      const url = `${window.PAST_DAYS_URL}?limit=${encodeURIComponent(limit)}`;
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+
+      if (!resp.ok) {
+        status.textContent = `Error (${resp.status}) loading past days`;
+        return;
+      }
+
+      const payload = await resp.json();
+      const data = payload.data || [];
+
+      if (data.length === 0) {
+        status.textContent = "No past daily records found.";
+        return;
+      }
+
+      for (const item of data) {
+        const opt = document.createElement("option");
+        opt.value = item.day;
+        opt.textContent = `${item.day} (saved @ ${item.timestamp})`;
+        sel.appendChild(opt);
+      }
+
+      status.textContent = `Loaded ${data.length} day(s).`;
+    }
+
+    function matrixToCells(matrix) {
+      const cells = [];
+      const m = matrix || [];
+      for (let r = 0; r < m.length; r++) {
+        const row = m[r] || [];
+        for (let c = 0; c < row.length; c++) {
+          cells.push({ r: r + 1, c: c + 1, value: Number(row[c]) || 0 });
+        }
+      }
+      return cells;
+    }
+
+    function setViewMode(mode, label) {
+      const heatmapTitle = document.getElementById("heatmapTitle");
+      const heatmapSubtitle = document.getElementById("heatmapSubtitle");
+      const trendTitle = document.getElementById("trendTitle");
+      const trendSubtitle = document.getElementById("trendSubtitle");
+
+      const backBtn = document.getElementById("backToLive");
+      const backBtnTop = document.getElementById("backToLiveTop");
+
+      if (mode === "past") {
+        if (heatmapTitle) heatmapTitle.textContent = "Past Pressure Heatmap";
+        if (heatmapSubtitle) heatmapSubtitle.textContent = `Viewing past record: ${label || ""}`;
+
+        if (trendTitle) trendTitle.textContent = "Heatmap Trend (Past Snapshot)";
+        if (trendSubtitle) trendSubtitle.textContent = "This shows the selected day's pressure pattern.";
+
+        if (backBtn) backBtn.style.display = "inline-block";
+        if (backBtnTop) backBtnTop.style.display = "inline-block";
+      } else {
+        if (heatmapTitle) heatmapTitle.textContent = "Live Pressure Heatmap";
+        if (heatmapSubtitle) heatmapSubtitle.textContent = "This map shows where more pressure is building up on your seat. Red means higher pressure.";
+
+        if (trendTitle) trendTitle.textContent = "Heatmap Trend";
+        if (trendSubtitle) trendSubtitle.textContent = "This chart shows how your seat pressure changes over time.";
+
+        if (backBtn) backBtn.style.display = "none";
+        if (backBtnTop) backBtnTop.style.display = "none";
+      }
+    }
+
+    async function viewPastDay() {
+      const day = document.getElementById("pastDaySelect").value;
+      const status = document.getElementById("pastDaysStatus");
+
+      if (!day) {
+        status.textContent = "Select a day first.";
+        return;
+      }
+
+      status.textContent = `Loading ${day}...`;
+
+      const url = `${window.PAST_DAY_GRID_URL}?day=${encodeURIComponent(day)}&max_rows=60&max_cols=60`;
+      const resp = await fetch(url, { headers: { Accept: "application/json" } });
+
+      if (!resp.ok) {
+        status.textContent = `Error (${resp.status}) loading past day`;
+        return;
+      }
+
+      const payload = await resp.json();
+
+      const cells = payload.cells || (payload.matrix ? matrixToCells(payload.matrix) : []);
+      if (window.renderHeatmapFromCells) {
+        window.renderHeatmapFromCells(cells, payload.timestamp || payload.day);
+      }
+
+      if (window.renderPastTrendFromPastDayGridPayload) {
+        window.renderPastTrendFromPastDayGridPayload(payload);
+      } else if (window.pauseTrendChart) {
+        window.pauseTrendChart();
+      }
+
+      setViewMode("past", payload.day || day);
+      status.textContent = `Viewing past record for ${payload.day || day}.`;
+    }
+
+    function backToLive() {
+      const status = document.getElementById("pastDaysStatus");
+
+      if (window.resumeLiveHeatmap) window.resumeLiveHeatmap();
+      if (window.resumeTrendChart) window.resumeTrendChart();
+
+      setViewMode("live");
+      status.textContent = "Back to Live heatmap.";
+    }
+
+    document.getElementById("loadPastDays").addEventListener("click", loadPastDays);
+    document.getElementById("viewPastDay").addEventListener("click", viewPastDay);
+    document.getElementById("backToLive").addEventListener("click", backToLive);
+    document.getElementById("backToLiveTop").addEventListener("click", backToLive);
+  </script>
 {% endblock %}

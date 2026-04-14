@@ -1,0 +1,75 @@
+{% extends "admin/base_site.html" %}
+{% load admin_urls %}
+
+{% block content %}
+<div class="module">
+  <h1>{{ title }}</h1>
+
+  <div class="description">
+    <p>Manage which patients each clinician can access. Check the boxes to assign patients to clinicians.</p>
+  </div>
+
+  {% for clinician in clinicians %}
+    <div class="module" style="margin-bottom: 20px;">
+      <h2>{{ clinician.username }} ({{ clinician.first_name }} {{ clinician.last_name }})</h2>
+
+      <form method="post" style="margin-top: 10px;">
+        {% csrf_token %}
+        <input type="hidden" name="clinician_id" value="{{ clinician.id }}" />
+
+        <div style="max-height: 300px; overflow-y: auto; border: 1px solid #ddd; padding: 10px;">
+          {% for patient in patients %}
+            <label style="display: block; margin: 5px 0;">
+              <input type="checkbox" name="patient_ids" value="{{ patient.id }}"
+                     {% if patient in clinician.assigned_patients.all %}checked{% endif %} />
+              {{ patient.username }} ({{ patient.first_name }} {{ patient.last_name }})
+              {% if patient.id_number %} - ID: {{ patient.id_number }}{% endif %}
+            </label>
+          {% endfor %}
+        </div>
+
+        <div class="submit-row" style="margin-top: 10px;">
+          <input type="submit" value="Update Assignments for {{ clinician.username }}" class="default" />
+        </div>
+      </form>
+    </div>
+  {% endfor %}
+
+  <div class="module">
+    <h2>Quick Actions</h2>
+    <ul>
+      <li><a href="{% url 'admin:patients_clinicianpatientaccess_changelist' %}">View all assignments</a></li>
+      <li><a href="{% url 'admin:patients_clinicianpatientaccess_add' %}">Add new assignment</a></li>
+    </ul>
+  </div>
+</div>
+
+<style>
+  .description {
+    margin-bottom: 20px;
+    padding: 10px;
+    background: #f8f8f8;
+    border: 1px solid #ddd;
+  }
+  .module h2 {
+    margin-top: 0;
+    color: #333;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 5px;
+  }
+  .submit-row {
+    text-align: right;
+  }
+  .submit-row input[type="submit"] {
+    background: #79aec8;
+    color: white;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+  }
+  .submit-row input[type="submit"]:hover {
+    background: #609ab6;
+  }
+</style>
+{% endblock %}

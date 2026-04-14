@@ -1,0 +1,87 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h1>Clinician Dashboard</h1>
+
+<p>Total rows: {{ patient_rows|length }}</p>
+
+<form method="get" style="margin-bottom: 16px;">
+  <input
+    type="text"
+    name="q"
+    value="{{ query }}"
+    placeholder="Search by patient name or ID"
+  >
+
+  <select name="alert">
+    <option value="">All alerts</option>
+    <option value="info" {% if alert_filter == "info" %}selected{% endif %}>Info</option>
+    <option value="warning" {% if alert_filter == "warning" %}selected{% endif %}>Warning</option>
+    <option value="critical" {% if alert_filter == "critical" %}selected{% endif %}>Critical</option>
+  </select>
+
+  <button type="submit">Filter</button>
+</form>
+
+<table border="1" cellpadding="8" cellspacing="0">
+  <thead>
+    <tr>
+      <th>Priority</th>
+      <th>Name</th>
+      <th>Username</th>
+      <th>ID Number</th>
+      <th>Notifications</th>
+      <th>Flagged Periods</th>
+      <th>Actions</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for row in patient_rows %}
+    <tr>
+      <td>
+        {% if row.patient.high_priority %}High{% else %}Normal{% endif %}
+      </td>
+      <td>{{ row.patient.first_name }} {{ row.patient.last_name }}</td>
+      <td>{{ row.patient.username }}</td>
+      <td>{{ row.patient.id_number|default:"-" }}</td>
+      <td>
+        {% if row.notification_count %}
+          <span style="background: {{ row.notification_color }}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px;">
+            {{ row.notification_count }}
+          </span>
+        {% else %}
+          0
+        {% endif %}
+      </td>
+      <td>
+        {% if row.flag_count %}
+          <span style="background: red; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px;">
+            {{ row.flag_count }}
+          </span>
+        {% else %}
+          0
+        {% endif %}
+      </td>
+      <td>
+        <a href="{% url 'patient_comments' row.patient.id %}">Comments</a>
+        |
+        <a href="{% url 'patient_pressure_graph' row.patient.id %}">Graph</a>
+        |
+        <a href="{% url 'flagged_periods' row.patient.id %}">Flags</a>
+
+        <form method="post" action="{% url 'toggle_priority' row.patient.id %}" style="display:inline; margin-left:8px;">
+          {% csrf_token %}
+          <button type="submit">
+            {% if row.patient.high_priority %}Remove priority{% else %}Mark high priority{% endif %}
+          </button>
+        </form>
+      </td>
+    </tr>
+    {% empty %}
+    <tr>
+      <td colspan="7">No patients found.</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}
