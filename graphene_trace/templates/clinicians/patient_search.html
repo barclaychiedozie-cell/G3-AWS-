@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="container" style="max-width: 900px; margin: 30px auto;">
+  <h1>Patient Search</h1>
+
+  <form method="get" style="margin-bottom: 20px;">
+    <input
+      type="text"
+      name="q"
+      value="{{ query }}"
+      placeholder="Search patient by username"
+      style="padding: 10px; width: 300px;"
+    >
+    <button type="submit" style="padding: 10px 16px;">Search</button>
+  </form>
+
+  {% if patient_rows %}
+    <table border="1" cellpadding="10" cellspacing="0" style="width: 100%; border-collapse: collapse;">
+      <thead>
+        <tr>
+          <th>Username</th>
+          <th>Name</th>
+          <th>Priority</th>
+          <th>Actions</th>
+        </tr>
+      </thead>
+      <tbody>
+        {% for row in patient_rows %}
+          <tr>
+            <td>{{ row.patient.username }}</td>
+            <td>{{ row.patient.first_name }} {{ row.patient.last_name }}</td>
+            <td>
+              {% if row.status.high_priority %}
+                🔴 High Priority
+              {% else %}
+                Normal
+              {% endif %}
+            </td>
+            <td>
+              <a href="{% url 'patient_comments' row.patient.id %}">View Comments</a>
+              <br><br>
+              {% if row.status.high_priority %}
+                <a href="{% url 'remove_high_priority' row.patient.id %}">Remove Priority</a>
+              {% else %}
+                <a href="{% url 'mark_high_priority' row.patient.id %}">Mark High Priority</a>
+              {% endif %}
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  {% else %}
+    <p>No patients found.</p>
+  {% endif %}
+</div>
+{% endblock %}

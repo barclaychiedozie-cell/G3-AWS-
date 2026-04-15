@@ -7,14 +7,16 @@ The `urlpatterns` list routes URLs to views. For more information please see:
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
+from django.conf import settings
+from django.conf.urls.static import static
 
 urlpatterns = [
     path("admin/", admin.site.urls),
 
-    # Users app URLs (register, etc.)
+    # Users app URLs
     path("accounts/", include("users.urls")),
 
-    # Auth (login/logout)
+    # Auth
     path(
         "accounts/login/",
         auth_views.LoginView.as_view(template_name="registration/login.html"),
@@ -56,9 +58,9 @@ urlpatterns = [
         name="password_reset_complete",
     ),
 
-    # Patient routes
     path("", include("patients.urls")),
-
-    # Clinician routes
-    path("clinician/", include("clinicians.urls")),
+    path("", include("clinicians.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
