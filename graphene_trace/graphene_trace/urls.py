@@ -17,8 +17,13 @@ Including another URLconf
 from django.contrib import admin
 from django.contrib.auth import views as auth_views
 from django.urls import include, path
+<<<<<<< HEAD
 from django.views.generic import RedirectView
 from users.views import RoleBasedLoginView, role_home_redirect
+=======
+from django.conf import settings
+from django.conf.urls.static import static
+>>>>>>> 0741e6e60f08aeb22abba00e3256829320db8944
 
 urlpatterns = [
     path("admin/", admin.site.urls),
@@ -68,3 +73,6 @@ urlpatterns = [
     path("", include("patients.urls")),
     path("", include("clinicians.urls")),
 ]
+
+if settings.DEBUG:
+    urlpatterns += static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
