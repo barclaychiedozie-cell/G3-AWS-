@@ -11,7 +11,6 @@ class User(AbstractUser):
 
     role = models.CharField(max_length=10, choices=ROLE_CHOICES, default="patient")
     id_number = models.CharField(max_length=20, unique=True, null=True, blank=True)
-    high_priority = models.BooleanField(default=False)
 
     def save(self, *args, **kwargs):
         if self.is_superuser:

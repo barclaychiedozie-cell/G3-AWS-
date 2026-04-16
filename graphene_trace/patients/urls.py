@@ -1,9 +1,14 @@
 from django.urls import path
-
 from . import views
 
 urlpatterns = [
-    path("", views.dashboard, name="dashboard"),
+    # ✅ NEW: smart redirect based on role
+    path("", views.home_redirect, name="home"),
+
+    # ✅ Patient dashboard moved here
+    path("dashboard/", views.dashboard, name="dashboard"),
+
+    # Comments
     path("comments/", views.comments, name="comments"),
 
     # Live (DB PressureData)

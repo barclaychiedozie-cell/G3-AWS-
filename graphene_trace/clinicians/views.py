@@ -8,6 +8,7 @@ from patients.models import (
     ClinicianPatientAccess,
     PressureData,
     HighPressureFlag,
+    PatientStatus,
 )
 from patients.forms import CommentForm
 
@@ -16,7 +17,7 @@ User = get_user_model()
 
 @login_required
 def dashboard(request):
-    if request.user.role != "clinician":
+    if request.user.role not in ["clinician", "admin"]:
         return render(request, "403.html", status=403)
 
     query = (request.GET.get("q") or "").strip()
@@ -47,7 +48,7 @@ def dashboard(request):
     patients = patients.annotate(
         notification_count=Count("notifications"),
         latest_alert=Max("notifications__timestamp"),
-    ).order_by("-high_priority", "-latest_alert", "username")
+    ).order_by("username")
 
     patient_rows = []
     for patient in patients[:50]:
@@ -62,6 +63,7 @@ def dashboard(request):
             notification_color = "blue"
 
         flag_count = patient.pressure_flags.count()
+        status_obj, _ = PatientStatus.objects.get_or_create(patient=patient)
 
         patient_rows.append(
             {
@@ -69,6 +71,7 @@ def dashboard(request):
                 "notification_count": patient.notification_count,
                 "notification_color": notification_color,
                 "flag_count": flag_count,
+                "status": status_obj,
             }
         )
 
@@ -85,19 +88,20 @@ def dashboard(request):
 
 @login_required
 def toggle_priority(request, patient_id):
-    if request.user.role != "clinician":
+    if request.user.role not in ["clinician", "admin"]:
         return render(request, "403.html", status=403)
 
     patient = get_object_or_404(User, id=patient_id, role="patient")
-    patient.high_priority = not patient.high_priority
-    patient.save(update_fields=["high_priority"])
+    status_obj, _ = PatientStatus.objects.get_or_create(patient=patient)
+    status_obj.high_priority = not status_obj.high_priority
+    status_obj.save()
 
-    return redirect("clinician_dashboard")
+    return redirect("patient_search")
 
 
 @login_required
 def patient_comments(request, patient_id):
-    if request.user.role != "clinician":
+    if request.user.role not in ["clinician", "admin"]:
         return render(request, "403.html", status=403)
 
     patient = get_object_or_404(User, id=patient_id, role="patient")
@@ -118,17 +122,45 @@ def patient_comments(request, patient_id):
     return render(
         request,
         "clinicians/patient_comments.html",
+        {"patient": patient, "comments": comments, "form": form},
+    )
+
+
+@login_required
+def patient_search(request):
+    if request.user.role not in ["clinician", "admin"]:
+        return render(request, "403.html", status=403)
+
+    query = (request.GET.get("q") or "").strip()
+
+    patients = User.objects.filter(role="patient").order_by("username")
+
+    if query:
+        patients = patients.filter(username__icontains=query)
+
+    patient_rows = []
+    for patient in patients:
+        status_obj, _ = PatientStatus.objects.get_or_create(patient=patient)
+        patient_rows.append(
+            {
+                "patient": patient,
+                "status": status_obj,
+            }
+        )
+
+    return render(
+        request,
+        "clinicians/patient_search.html",
         {
-            "patient": patient,
-            "comments": comments,
-            "form": form,
+            "query": query,
+            "patient_rows": patient_rows,
         },
     )
 
 
 @login_required
 def patient_pressure_graph(request, patient_id):
-    if request.user.role != "clinician":
+    if request.user.role not in ["clinician", "admin"]:
         return render(request, "403.html", status=403)
 
     has_access = ClinicianPatientAccess.objects.filter(
@@ -136,7 +168,7 @@ def patient_pressure_graph(request, patient_id):
         patient_id=patient_id,
     ).exists()
 
-    if not has_access:
+    if not has_access and request.user.role != "admin":
         return render(request, "403.html", status=403)
 
     patient = get_object_or_404(User, id=patient_id, role="patient")
@@ -158,7 +190,7 @@ def patient_pressure_graph(request, patient_id):
 
 @login_required
 def flagged_periods(request, patient_id):
-    if request.user.role != "clinician":
+    if request.user.role not in ["clinician", "admin"]:
         return render(request, "403.html", status=403)
 
     has_access = ClinicianPatientAccess.objects.filter(
@@ -166,7 +198,7 @@ def flagged_periods(request, patient_id):
         patient_id=patient_id,
     ).exists()
 
-    if not has_access:
+    if not has_access and request.user.role != "admin":
         return render(request, "403.html", status=403)
 
     patient = get_object_or_404(User, id=patient_id, role="patient")
@@ -180,3 +212,31 @@ def flagged_periods(request, patient_id):
             "flags": flags,
         },
     )
+
+
+@login_required
+def mark_high_priority(request, patient_id):
+    if request.user.role not in ["clinician", "admin"]:
+        return render(request, "403.html", status=403)
+
+    patient = get_object_or_404(User, id=patient_id, role="patient")
+    status_obj, _ = PatientStatus.objects.get_or_create(patient=patient)
+
+    status_obj.high_priority = True
+    status_obj.save()
+
+    return redirect("patient_search")
+
+
+@login_required
+def remove_high_priority(request, patient_id):
+    if request.user.role not in ["clinician", "admin"]:
+        return render(request, "403.html", status=403)
+
+    patient = get_object_or_404(User, id=patient_id, role="patient")
+    status_obj, _ = PatientStatus.objects.get_or_create(patient=patient)
+
+    status_obj.high_priority = False
+    status_obj.save()
+
+    return redirect("patient_search")

@@ -10,8 +10,13 @@ from django.utils import timezone
 from django.utils.dateparse import parse_date
 
 from .forms import CommentForm
-from .models import Comment, Notification, PressureData, PressureUpload
-
+from .models import (
+    Comment,
+    Notification,
+    PressureData,
+    PressureUpload,
+    SessionSummary,
+)
 
 SENSOR_RE = re.compile(r"r(\d+)_c(\d+)$")
 ACTIVE_THRESHOLD = 10.0
@@ -177,6 +182,17 @@ def _build_session_summary_from_pressuredata(patient):
 
 
 @login_required
+def home_redirect(request):
+    if request.user.role == "patient":
+        return redirect("dashboard")
+
+    if request.user.role in ["admin", "clinician"]:
+        return redirect("patient_search")
+
+    return render(request, "403.html", status=403)
+
+
+@login_required
 def dashboard(request):
     if request.user.role != "patient":
         return render(request, "403.html", status=403)
@@ -197,12 +213,47 @@ def dashboard(request):
     else:
         session_summary = _build_session_summary_from_pressuredata(request.user)
 
+    last_session = (
+        SessionSummary.objects.filter(patient=request.user)
+        .order_by("-session_date")
+        .first()
+    )
+
+    pressure_score = 0
+    pressure_message = "No session data yet."
+
+    if last_session:
+        pressure_score = last_session.pressure_score
+
+        if pressure_score >= 80:
+            pressure_message = "You are sitting correctly."
+        elif pressure_score >= 50:
+            pressure_message = "Your posture is okay, but could be improved."
+        else:
+            pressure_message = "Please adjust your sitting posture."
+    elif session_summary:
+        pressure_score = session_summary["pressure_score"]
+        if pressure_score >= 80:
+            pressure_message = "You are sitting correctly."
+        elif pressure_score >= 50:
+            pressure_message = "Your posture is okay, but could be improved."
+        else:
+            pressure_message = "Please adjust your sitting posture."
+
     return render(
         request,
         "patients/dashboard.html",
         {
             "notifications": notifications,
             "session_summary": session_summary,
+            "last_session": last_session,
+            "pressure_score": pressure_score,
+            "pressure_message": pressure_message,
+            "heatmap_legend": [
+                {"label": "Low Pressure", "color": "#0000FF"},
+                {"label": "Medium Pressure", "color": "#FFFF00"},
+                {"label": "High Pressure", "color": "#FF0000"},
+            ],
         },
     )
 
@@ -218,6 +269,7 @@ def live_grid_json(request):
         .values_list("timestamp", flat=True)
         .first()
     )
+
     if not latest_ts:
         return JsonResponse({"cells": [], "timestamp": None})
 
@@ -228,6 +280,7 @@ def live_grid_json(request):
         m = SENSOR_RE.match((row.sensor_location or "").strip())
         if not m:
             continue
+
         cells.append(
             {
                 "r": int(m.group(1)),
@@ -253,31 +306,28 @@ def live_heatmap_chart_json(request):
     )
 
     buckets = {}
+
     for row in qs:
-        ts_key = row["timestamp"].isoformat()
+        ts = row["timestamp"].isoformat()
         val = float(row["pressure_value"] or 0)
 
-        b = buckets.get(ts_key)
-        if not b:
-            b = {"timestamp": ts_key, "sum": 0.0, "count": 0, "max": val}
-            buckets[ts_key] = b
+        if ts not in buckets:
+            buckets[ts] = {"timestamp": ts, "sum": 0, "count": 0, "max": val}
 
-        b["sum"] += val
-        b["count"] += 1
-        if val > b["max"]:
-            b["max"] = val
+        buckets[ts]["sum"] += val
+        buckets[ts]["count"] += 1
+        buckets[ts]["max"] = max(buckets[ts]["max"], val)
 
-    data = sorted(buckets.values(), key=lambda x: x["timestamp"])
-    out = [
+    data = [
         {
-            "timestamp": d["timestamp"],
-            "max": d["max"],
-            "avg": (d["sum"] / d["count"]) if d["count"] else 0,
+            "timestamp": b["timestamp"],
+            "max": b["max"],
+            "avg": b["sum"] / b["count"] if b["count"] else 0,
         }
-        for d in data
+        for b in sorted(buckets.values(), key=lambda x: x["timestamp"])
     ]
 
-    return JsonResponse({"data": out})
+    return JsonResponse({"data": data})
 
 
 @login_required
@@ -296,6 +346,7 @@ def comments(request):
         form = CommentForm(user=request.user)
 
     comments_qs = Comment.objects.filter(patient=request.user).order_by("-timestamp")
+
     return render(
         request,
         "patients/comments.html",
@@ -308,18 +359,12 @@ def pressure_history_json(request):
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
-    since_minutes = int(request.GET.get("since_minutes", "1440"))
-    since_minutes = max(1, min(since_minutes, 60 * 24 * 365))
-
-    limit = int(request.GET.get("limit", "20000"))
-    limit = max(1, min(limit, 50000))
-
-    since = timezone.now() - timedelta(minutes=since_minutes)
+    since = timezone.now() - timedelta(minutes=1440)
 
     qs = (
         PressureData.objects.filter(patient=request.user, timestamp__gte=since)
         .values("timestamp", "sensor_location", "pressure_value")
-        .order_by("-timestamp")[:limit]
+        .order_by("-timestamp")[:20000]
     )
 
     data = [
@@ -339,30 +384,20 @@ def past_days_json(request):
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
-    limit_days = int(request.GET.get("limit", "30"))
-    limit_days = max(1, min(limit_days, 366))
-
     uploads = PressureUpload.objects.filter(patient=request.user).order_by("-timestamp")
-
-    day_map = {}
-    for u in uploads:
-        day_str = timezone.localtime(u.timestamp).date().isoformat()
-        if day_str not in day_map:
-            day_map[day_str] = u
-        if len(day_map) >= limit_days:
-            break
 
     data = [
         {
-            "day": day,
+            "day": timezone.localtime(u.timestamp).date().isoformat(),
             "upload_id": u.id,
             "timestamp": u.timestamp.isoformat(),
             "uploaded_at": u.uploaded_at.isoformat(),
             "rows": u.rows,
             "cols": u.cols,
         }
-        for day, u in sorted(day_map.items(), key=lambda x: x[0], reverse=True)
+        for u in uploads[:30]
     ]
+
     return JsonResponse({"data": data})
 
 
@@ -371,75 +406,21 @@ def past_day_grid_json(request):
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
-    day_raw = (request.GET.get("day") or "").strip()
-    if not day_raw:
-        return JsonResponse({"error": "missing day"}, status=400)
+    day = parse_date(request.GET.get("day", ""))
 
-    day = parse_date(day_raw)
     if not day:
-        return JsonResponse({"error": f"day not parseable: {day_raw}"}, status=400)
+        return JsonResponse({"error": "invalid day"}, status=400)
 
-    max_rows = int(request.GET.get("max_rows", "60"))
-    max_cols = int(request.GET.get("max_cols", "60"))
-    max_rows = max(5, min(max_rows, 400))
-    max_cols = max(5, min(max_cols, 400))
+    upload = PressureUpload.objects.filter(patient=request.user).first()
 
-    tz = timezone.get_current_timezone()
-    start_local = timezone.make_aware(datetime(day.year, day.month, day.day, 0, 0, 0), tz)
-    end_local = start_local + timedelta(days=1)
-
-    upload = (
-        PressureUpload.objects.filter(
-            patient=request.user,
-            timestamp__gte=start_local,
-            timestamp__lt=end_local,
-        )
-        .order_by("-timestamp")
-        .first()
-    )
     if not upload:
         return JsonResponse({"error": "not found"}, status=404)
 
-    full_matrix = _read_upload_matrix(upload)
-    source_rows = len(full_matrix)
-    source_cols = max((len(r) for r in full_matrix), default=0)
-
-    if source_rows == 0 or source_cols == 0:
-        return JsonResponse({
+    return JsonResponse(
+        {
             "day": day.isoformat(),
-            "upload_id": upload.id,
-            "timestamp": upload.timestamp.isoformat(),
+            "matrix": [],
             "rows": 0,
             "cols": 0,
-            "matrix": [],
-            "downsampled": False,
-            "source_rows": 0,
-            "source_cols": 0,
-            "row_step": 1,
-            "col_step": 1,
-        })
-
-    row_step = max(1, (source_rows + max_rows - 1) // max_rows)
-    col_step = max(1, (source_cols + max_cols - 1) // max_cols)
-
-    matrix = []
-    for r in range(0, source_rows, row_step):
-        src = full_matrix[r]
-        ds_row = []
-        for c in range(0, source_cols, col_step):
-            ds_row.append(src[c] if c < len(src) else 0.0)
-        matrix.append(ds_row)
-
-    return JsonResponse({
-        "day": day.isoformat(),
-        "upload_id": upload.id,
-        "timestamp": upload.timestamp.isoformat(),
-        "rows": len(matrix),
-        "cols": max(len(r) for r in matrix) if matrix else 0,
-        "matrix": matrix,
-        "downsampled": (row_step > 1 or col_step > 1),
-        "source_rows": source_rows,
-        "source_cols": source_cols,
-        "row_step": row_step,
-        "col_step": col_step,
-    })
+        }
+    )

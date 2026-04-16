@@ -1,32 +1,56 @@
 {% extends "base.html" %}
 
 {% block content %}
-<h2>Comments for {{ patient.username }}</h2>
+<div class="container" style="max-width: 900px; margin: 30px auto;">
+  <h1>Comments for {{ patient.first_name|default:patient.username }} {{ patient.last_name }}</h1>
+  <p><strong>Username:</strong> {{ patient.username }}</p>
 
-<h3>Reply</h3>
-<form method="post">
-  {% csrf_token %}
-  {{ form.as_p }}
-  <button type="submit">Reply</button>
-</form>
-
-<hr>
-
-{% for comment in comments %}
-  <div style="border:1px solid #eee; padding:10px; margin:10px 0;">
-    <div>
-      <strong>
-        {% if comment.clinician %}
-          Clinician: {{ comment.clinician.username }}
-        {% else %}
-          Patient: {{ comment.patient.username }}
-        {% endif %}
-      </strong>
-      — {{ comment.timestamp }}
-    </div>
-    <div>{{ comment.text }}</div>
+  <div style="margin: 24px 0; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+    <h2 style="margin-top: 0;">Add Reply</h2>
+    <form method="post">
+      {% csrf_token %}
+      {{ form.as_p }}
+      <button type="submit" style="padding: 10px 16px;">Send Reply</button>
+    </form>
   </div>
-{% empty %}
-  <p>No comments yet.</p>
-{% endfor %}
+
+  <div style="margin-top: 24px;">
+    <h2>Comment History</h2>
+
+    {% if comments %}
+      {% for comment in comments %}
+        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 16px; margin-bottom: 14px;">
+          <p style="margin: 0 0 8px 0;">
+            <strong>
+              {% if comment.clinician %}
+                {{ comment.clinician.username }}
+              {% else %}
+                {{ comment.patient.username }}
+              {% endif %}
+            </strong>
+            <span style="color: #666;">— {{ comment.timestamp }}</span>
+          </p>
+
+          <p style="margin: 0 0 8px 0;">{{ comment.text }}</p>
+
+          {% if comment.is_reply %}
+            <span style="display: inline-block; padding: 4px 8px; background: #eef; border-radius: 4px;">
+              Clinician Reply
+            </span>
+          {% else %}
+            <span style="display: inline-block; padding: 4px 8px; background: #efe; border-radius: 4px;">
+              Patient Comment
+            </span>
+          {% endif %}
+        </div>
+      {% endfor %}
+    {% else %}
+      <p>No comments available for this patient.</p>
+    {% endif %}
+  </div>
+
+  <div style="margin-top: 20px;">
+    <a href="{% url 'patient_search' %}">← Back to Patient Search</a>
+  </div>
+</div>
 {% endblock %}

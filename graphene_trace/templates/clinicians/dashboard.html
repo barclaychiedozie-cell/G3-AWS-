@@ -39,7 +39,7 @@
     {% for row in patient_rows %}
     <tr>
       <td>
-        {% if row.patient.high_priority %}High{% else %}Normal{% endif %}
+        {% if row.status.high_priority %}High{% else %}Normal{% endif %}
       </td>
       <td>{{ row.patient.first_name }} {{ row.patient.last_name }}</td>
       <td>{{ row.patient.username }}</td>
@@ -72,7 +72,7 @@
         <form method="post" action="{% url 'toggle_priority' row.patient.id %}" style="display:inline; margin-left:8px;">
           {% csrf_token %}
           <button type="submit">
-            {% if row.patient.high_priority %}Remove priority{% else %}Mark high priority{% endif %}
+            {% if row.status.high_priority %}Remove priority{% else %}Mark high priority{% endif %}
           </button>
         </form>
       </td>
