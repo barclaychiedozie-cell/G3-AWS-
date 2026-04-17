@@ -1,54 +1,46 @@
-from django.contrib import admin
+﻿from django.contrib import admin
 from django.contrib.auth.admin import UserAdmin as DjangoUserAdmin
-from django.utils.translation import gettext_lazy as _
+from django.contrib.auth.models import Group
+from .models import User, RoleAssignment
 
-from .models import User
+try:
+    admin.site.unregister(Group)
+except admin.sites.NotRegistered:
+    pass
 
 
 @admin.register(User)
 class UserAdmin(DjangoUserAdmin):
-    """
-    Admin for the custom users.User model.
-
-    Provides:
-      - Add/change/delete users
-      - Password reset/change UI (via Django's built-in UserAdmin)
-    """
-
-    ordering = ("username",)
-    list_display = ("username", "email", "role", "is_staff", "is_active", "date_joined")
-    list_filter = ("role", "is_staff", "is_superuser", "is_active")
-    search_fields = ("username", "email")
-
-    # If you use a lot of users, this is faster than a dropdown in related models
-    # (safe to keep even if small)
-    # raw_id_fields = ()
+    list_display = ('username', 'email', 'role', 'is_staff', 'is_active')
+    list_filter = ('role', 'is_staff', 'is_superuser', 'is_active')
+    search_fields = ('username', 'email')
 
     fieldsets = (
-        (None, {"fields": ("username", "password")}),
-        (_("Personal info"), {"fields": ("first_name", "last_name", "email")}),
-        (_("Role"), {"fields": ("role",)}),
-        (
-            _("Permissions"),
-            {
-                "fields": (
-                    "is_active",
-                    "is_staff",
-                    "is_superuser",
-                    "groups",
-                    "user_permissions",
-                )
-            },
-        ),
-        (_("Important dates"), {"fields": ("last_login", "date_joined")}),
+        (None, {'fields': ('username', 'password')}),
+        ('Personal info', {'fields': ('first_name', 'last_name', 'email')}),
+        ('Role', {'fields': ('role',)}),
+        ('Permissions', {'fields': ('is_active', 'is_staff', 'is_superuser', 'user_permissions')}),
+        ('Important dates', {'fields': ('last_login', 'date_joined')}),
     )
 
     add_fieldsets = (
-        (
-            None,
-            {
-                "classes": ("wide",),
-                "fields": ("username", "email", "role", "password1", "password2", "is_staff", "is_active"),
-            },
-        ),
+        (None, {
+            'classes': ('wide',),
+            'fields': ('username', 'email', 'role', 'password1', 'password2', 'is_staff', 'is_active'),
+        }),
     )
+
+
+@admin.register(RoleAssignment)
+class RoleAssignmentAdmin(admin.ModelAdmin):
+    list_display = ('username', 'email', 'role')
+    search_fields = ('username', 'email')
+    list_filter = ('role',)
+    fields = ('username', 'role')
+    readonly_fields = ('username',)
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_delete_permission(self, request, obj=None):
+        return False

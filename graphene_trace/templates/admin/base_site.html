@@ -1,0 +1,17 @@
+﻿{% extends "admin/base_site.html" %}
+
+{% block content %}
+    <a href="javascript:history.back()" style="
+        display:inline-block;
+        margin-bottom:15px;
+        padding:8px 12px;
+        background:#417690;
+        color:white;
+        text-decoration:none;
+        border-radius:5px;
+    ">
+        ⬅ Back
+    </a>
+
+    {{ block.super }}
+{% endblock %}
