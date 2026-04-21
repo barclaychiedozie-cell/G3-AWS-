@@ -1,17 +1,19 @@
-﻿{% extends "admin/base_site.html" %}
+﻿{% extends "admin/base.html" %}
+{% load i18n %}
 
-{% block content %}
-    <a href="javascript:history.back()" style="
-        display:inline-block;
-        margin-bottom:15px;
-        padding:8px 12px;
-        background:#417690;
-        color:white;
-        text-decoration:none;
-        border-radius:5px;
-    ">
-        ⬅ Back
-    </a>
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">Graphene Trace Administration</a>
+</h1>
+{% endblock %}
 
-    {{ block.super }}
+{% block userlinks %}
+  {{ block.super }}
+  &nbsp;|&nbsp;
+  <form method="post" action="{% url 'logout' %}" style="display:inline;margin:0;">
+    {% csrf_token %}
+    <button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;">
+      {% trans 'Log out' %}
+    </button>
+  </form>
 {% endblock %}
