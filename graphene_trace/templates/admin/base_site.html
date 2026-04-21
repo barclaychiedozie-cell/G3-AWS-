@@ -1,0 +1,19 @@
+﻿{% extends "admin/base.html" %}
+{% load i18n %}
+
+{% block branding %}
+<h1 id="site-name">
+    <a href="{% url 'admin:index' %}">Graphene Trace Administration</a>
+</h1>
+{% endblock %}
+
+{% block userlinks %}
+  {{ block.super }}
+  &nbsp;|&nbsp;
+  <form method="post" action="{% url 'logout' %}" style="display:inline;margin:0;">
+    {% csrf_token %}
+    <button type="submit" style="background:none;border:none;color:inherit;cursor:pointer;padding:0;font-size:inherit;text-decoration:underline;">
+      {% trans 'Log out' %}
+    </button>
+  </form>
+{% endblock %}
