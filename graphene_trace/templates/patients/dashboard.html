@@ -8,7 +8,7 @@
   <div>
     <div class="small">Patient Dashboard</div>
     <h1 class="h1" style="margin-top:6px;">
-      Welcome, {{ user.first_name|default:user.username }}
+      Welcome, {{ user.username }}
     </h1>
     {% if user.id_number %}
       <div class="small" style="margin-top:6px;">ID: <strong>{{ user.id_number }}</strong></div>
@@ -121,25 +121,7 @@
         <h2 class="h2" style="margin:0;">Last Session Summary</h2>
       </div>
 
-      {% if last_session %}
-        <div style="display:grid; gap:8px;">
-          <div class="p" style="margin:0;">
-            <strong>Date:</strong> {{ last_session.session_date }}
-          </div>
-          <div class="p" style="margin:0;">
-            <strong>Duration:</strong> {{ last_session.duration_minutes }} minutes
-          </div>
-          <div class="p" style="margin:0;">
-            <strong>Pressure Score:</strong> {{ last_session.pressure_score }}
-          </div>
-          <div class="p" style="margin:0;">
-            <strong>Posture Status:</strong> {{ last_session.posture_status|default:"No posture status yet" }}
-          </div>
-          <div class="p" style="margin:0;">
-            <strong>Notes:</strong> {{ last_session.notes|default:"No notes available" }}
-          </div>
-        </div>
-      {% elif session_summary %}
+      {% if session_summary %}
         <div style="display:grid; gap:8px;">
           <div class="p" style="margin:0;">
             <strong>Date:</strong> {{ session_summary.timestamp }}
@@ -159,9 +141,12 @@
           <div class="p" style="margin:0;">
             <strong>Average Active Pressure:</strong> {{ session_summary.average_active_pressure }}
           </div>
+          <div class="p" style="margin:0;">
+            <strong>Explanation:</strong> {{ session_summary.plain_english }}
+          </div>
         </div>
       {% else %}
-        <p class="p" style="margin:0;">No session summary available yet.</p>
+        <p class="p" style="margin:0;">No uploaded or live pressure data available yet.</p>
       {% endif %}
     </section>
 

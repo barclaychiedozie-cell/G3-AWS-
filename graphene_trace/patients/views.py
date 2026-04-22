@@ -1,6 +1,6 @@
 import csv
 import re
-from datetime import datetime, timedelta
+from datetime import timedelta
 from io import TextIOWrapper
 
 from django.contrib.auth.decorators import login_required
@@ -15,7 +15,6 @@ from .models import (
     Notification,
     PressureData,
     PressureUpload,
-    SessionSummary,
 )
 
 SENSOR_RE = re.compile(r"r(\d+)_c(\d+)$")
@@ -37,6 +36,7 @@ def _read_upload_matrix(upload):
         for row in reader:
             if not row:
                 continue
+
             clean_row = []
             for cell in row:
                 raw = (cell or "").strip()
@@ -72,6 +72,7 @@ def _read_latest_pressuredata_matrix(patient):
         m = SENSOR_RE.match((row.sensor_location or "").strip())
         if not m:
             continue
+
         r = int(m.group(1))
         c = int(m.group(2))
         value = float(row.pressure_value or 0)
@@ -213,26 +214,12 @@ def dashboard(request):
     else:
         session_summary = _build_session_summary_from_pressuredata(request.user)
 
-    last_session = (
-        SessionSummary.objects.filter(patient=request.user)
-        .order_by("-session_date")
-        .first()
-    )
-
     pressure_score = 0
     pressure_message = "No session data yet."
 
-    if last_session:
-        pressure_score = last_session.pressure_score
-
-        if pressure_score >= 80:
-            pressure_message = "You are sitting correctly."
-        elif pressure_score >= 50:
-            pressure_message = "Your posture is okay, but could be improved."
-        else:
-            pressure_message = "Please adjust your sitting posture."
-    elif session_summary:
+    if session_summary:
         pressure_score = session_summary["pressure_score"]
+
         if pressure_score >= 80:
             pressure_message = "You are sitting correctly."
         elif pressure_score >= 50:
@@ -246,7 +233,6 @@ def dashboard(request):
         {
             "notifications": notifications,
             "session_summary": session_summary,
-            "last_session": last_session,
             "pressure_score": pressure_score,
             "pressure_message": pressure_message,
             "heatmap_legend": [
@@ -384,18 +370,29 @@ def past_days_json(request):
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
+    limit_days = int(request.GET.get("limit", "30"))
+    limit_days = max(1, min(limit_days, 366))
+
     uploads = PressureUpload.objects.filter(patient=request.user).order_by("-timestamp")
+
+    day_map = {}
+    for u in uploads:
+        day_str = timezone.localtime(u.timestamp).date().isoformat()
+        if day_str not in day_map:
+            day_map[day_str] = u
+        if len(day_map) >= limit_days:
+            break
 
     data = [
         {
-            "day": timezone.localtime(u.timestamp).date().isoformat(),
+            "day": day,
             "upload_id": u.id,
             "timestamp": u.timestamp.isoformat(),
             "uploaded_at": u.uploaded_at.isoformat(),
             "rows": u.rows,
             "cols": u.cols,
         }
-        for u in uploads[:30]
+        for day, u in sorted(day_map.items(), key=lambda x: x[0], reverse=True)
     ]
 
     return JsonResponse({"data": data})
@@ -406,21 +403,57 @@ def past_day_grid_json(request):
     if request.user.role != "patient":
         return JsonResponse({"error": "forbidden"}, status=403)
 
-    day = parse_date(request.GET.get("day", ""))
+    day_raw = (request.GET.get("day") or "").strip()
+    if not day_raw:
+        return JsonResponse({"error": "missing day"}, status=400)
 
+    day = parse_date(day_raw)
     if not day:
         return JsonResponse({"error": "invalid day"}, status=400)
 
-    upload = PressureUpload.objects.filter(patient=request.user).first()
+    tz = timezone.get_current_timezone()
+    start_local = timezone.make_aware(
+        timezone.datetime(day.year, day.month, day.day, 0, 0, 0),
+        tz,
+    )
+    end_local = start_local + timedelta(days=1)
+
+    upload = (
+        PressureUpload.objects.filter(
+            patient=request.user,
+            timestamp__gte=start_local,
+            timestamp__lt=end_local,
+        )
+        .order_by("-timestamp")
+        .first()
+    )
 
     if not upload:
         return JsonResponse({"error": "not found"}, status=404)
 
+    full_matrix = _read_upload_matrix(upload)
+    source_rows = len(full_matrix)
+    source_cols = max((len(r) for r in full_matrix), default=0)
+
+    if source_rows == 0 or source_cols == 0:
+        return JsonResponse(
+            {
+                "day": day.isoformat(),
+                "upload_id": upload.id,
+                "timestamp": upload.timestamp.isoformat(),
+                "rows": 0,
+                "cols": 0,
+                "matrix": [],
+            }
+        )
+
     return JsonResponse(
         {
             "day": day.isoformat(),
-            "matrix": [],
-            "rows": 0,
-            "cols": 0,
+            "upload_id": upload.id,
+            "timestamp": upload.timestamp.isoformat(),
+            "rows": source_rows,
+            "cols": source_cols,
+            "matrix": full_matrix,
         }
     )
